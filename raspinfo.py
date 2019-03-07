@@ -75,9 +75,9 @@ def load_engine(engine_file):
                 e_info['code'] = code
                 e_info['diam'] = math.ceil(float(diam))
                 e_info['dlen'] = math.ceil(float(dlen))
-                e_info['m2'] = m2
-                e_info['wt'] = wt
-                e_info['mf'] = mfg
+                e_info['m2'] = float(m2)
+                e_info['wt'] = float(wt)
+                e_info['mfg'] = mfg
                 e_info['thrust'] = []
 
                 parsing_thrust = True
@@ -154,121 +154,86 @@ def print_engine_info(e):
     else:
         mx = "%6.3lf" % e['npeak']
 
+    dxl = "%dx%d" % (e['diam'], e['dlen'])
     if args.csv:
-        print("\"%s\",\"%s\",%s,%s,%.2lf,%s,%s,%s,\"%dx%d\"",
-         e['code'], Mfg, tot, avg, e['t2'],
-         mx, mm, pm, e['dia'], e['dlen'])
+        print("\"%s\",\"%s\",%s,%s,%.2lf,%s,%s,%s,\"%s\"" %
+         (e['code'], e['mfg'][:5], tot, avg, e['t2'], mx, mm, pm, dxl))
 
-"""
+        for d in e['delay']:
+            if d == 0:
+                print(",\"%d" % d)
+            else:
+                print("-%d" % d)
+   
+        print("\"\n")
+    else:
+        print("%-9s %-5s  %6s %6s %5.2lf  %6s  %6s  %6s %7s %s" %
+                (e['code'], e['mfg'][:5], tot, avg, e['t2'], mx, mm, pm, dxl, '-'.join(str(d) for d in e['delay'])))
 
-    for(d = 0; e_info[e].delay[d] >= 0; d++)
-    if ( d == 0 )
-      printf(",\"%d", e_info[e].delay[d]);
-    else
-      printf("-%d", e_info[e].delay[d]);
-    
-    printf("\"\n");
-    }
-    else
-    {
-    printf("%-9s %-5s  %6s %6s %5.2lf  %6s  %6s  %6s %dx%d",
-         e_info[e].code, Mfg,
-         Tot, Avg, 
-         e_info[e].t2,
-         Max, mm, PM,
-         e_info[e].dia, e_info[e].len ) ;
 
-for(d = 0; e_info[e].delay[d] >= 0; d++)
-if ( d == 0 )
-  printf(" %d", e_info[e].delay[d]);
-else
-  printf("-%d", e_info[e].delay[d]);
 
-printf("\n");
-}
-}
+def print_engine_header():
 
-int print_engine_header( ) 
-{
-
-int L = 4 ;  /* set to header line count */
-
-if ( Pages++ > 0 )
-{
-if ( DoPages == 0 ) 
- return ( L ) ;
-else
- printf ( "\f\n" ) ;
-}
-
-if ( DoCSV )
-{
-printf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
-     "", "", 
-     "Total", "Avg", 
-     "Burn", 
-     "Peak", "Motor", "Pro",
-     "\",\"" ) ;
-
-printf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
-     "Motor", "Motor", 
-     "Impulse", "Thrust", 
-     "Time", 
-     "Thrust", "Mass", "Mass",
-     "\",\"" ) ;
-
-printf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
-     "Desig", "Mfg", 
-     "(Nsec)", "(N)", 
-     "(sec)", 
-     "(N)", "(Kg)", "(Kg)",
-     "D x L\",\"Delays" ) ;
-}
-else
-{
-printf("%-9s %-5s  %6s %6s %5s  %6s  %6s  %6s %s %d\n",
-     "", "", 
-     "Total", "Avg", 
-     "Burn", 
-     "Peak", "Motor", "Pro",
-     "       Page ", Pages ) ;
-
-printf("%-9s %-5s %7s %6s %5s  %6s  %6s  %6s %s\n",
-     " Motor", "Motor", 
-     "Impulse", "Thrust", 
-     "Time", 
-     "Thrust", "Mass", "Mass",
-     "" ) ;
-
-printf("%-9s %-5s  %6s %6s %5s  %6s  %6s  %6s %s\n",
-     " Desig", "Mfg", 
-     "(Nsec)", "(N)", 
-     "(sec)", 
-     "(N)", "(Kg)", "(Kg)",
-     "D x L  Delays" ) ;
-
-printf("%-9s %-5s %7s %6s %5s  %6s  %6s  %6s %s\n",
-     "=========", "=====", 
-     "=======", "======", 
-     "=====", 
-     "======", "======", "======",
-     "=================" );
-}
-return ( L ) ;
-}
-""" 
+    if args.csv:
+        print("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"" % (
+             "", "", 
+             "Total", "Avg", 
+             "Burn", 
+             "Peak", "Motor", "Prop",
+             "\",\""))
+        
+        print("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"" % (
+             "Motor", "Motor", 
+             "Impulse", "Thrust", 
+             "Time", 
+             "Thrust", "Mass", "Mass",
+             "\",\"" ))
+        
+        print("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"" % (
+             "Desig", "Mfg", 
+             "(Nsec)", "(N)", 
+             "(sec)", 
+             "(N)", "(Kg)", "(Kg)",
+             "D x L\",\"Delays" ))
+    else:
+        print("%-9s %-5s  %6s %6s %5s  %6s  %6s  %6s %s %d" % (
+             "", "", 
+             "Total", "Avg", 
+             "Burn", 
+             "Peak", "Motor", "Prop",
+             "       Page ", Pages ))
+        
+        print("%-9s %-5s %7s %6s %5s  %6s  %6s  %6s %s" % (
+             "Motor", "Motor", 
+             "Impulse", "Thrust", 
+             "Time", 
+             "Thrust", "Mass", "Mass",
+             ""))
+        
+        print("%-9s %-5s  %6s %6s %5s  %6s  %6s  %6s %s" % (
+             "Desig", "Mfg", 
+             "(Nsec)", "(N)", 
+             "(sec)", 
+             "(N)", "(Kg)", "(Kg)",
+             "D x L   Delays"))
+        
+        print("%-9s %-5s %7s %6s %5s  %6s  %6s  %6s %s" % (
+             "=========", "=====", 
+             "=======", "======", 
+             "=====", 
+             "======", "======", "======",
+             "================="))
 
 
 def main():
     parse_commandline()
 
     eng = load_engine(args.engfile)
-    print(json.dumps(eng, indent=2))
+    # print(json.dumps(eng, indent=2))
 
-    # if args.csv:
-    #     print_engine_header()
-    #
-    # print_engine_info()
+    print_engine_header()
+    for k in sorted(eng.keys()):
+        print_engine_info(eng[k])
 
 
 if __name__ == '__main__':
