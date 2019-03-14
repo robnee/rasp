@@ -1,27 +1,3 @@
-#ifndef UNITS_H
-
-#define UNITS_H              1
-
-#define  UNITS_NONE          0
-#define  UNITS_BYTE          1
-#define  UNITS_INTEGER       2
-#define  UNITS_LONG          3
-#define  UNITS_FLOAT         4
-#define  UNITS_DOUBLE        5
-#define  UNITS_LOGICAL       6
-#define  UNITS_STRING        7
-#define  UNITS_FILENAME      8
-
-#define  UNITS_TIME          1
-#define  UNITS_LENGTH        2
-#define  UNITS_MASS          3
-#define  UNITS_TEMP          4
-#define  UNITS_PRESS         5
-#define  UNITS_ANGLE         6
-#define  UNITS_EXISTS        7
-
-#define  MAXUNITLEN         31
-#define  U_NONE              0
 
 mass_unit = {
     "none": (1.00, "Kg"),
@@ -67,8 +43,8 @@ temp_unit = {
 
 press_unit = {
     "none": (1.00, "inHg"),
-    "pascals": (1.00, "Pa" ),
-    "pa": (1.00, "Pa" ),
+    "pascals": (1.00, "Pa"),
+    "pa": (1.00, "Pa"),
     "inch-mercury": (3386.386725364, "inHg"),
     "inches-mercury": (3386.386725364, "inHg"),
     "ins-hg": (3386.386725364, "inHg"),
@@ -80,8 +56,8 @@ press_unit = {
     "mm-hgs": (133.3223120222, "mmHg"),
     "mms": (133.3223120222, "mmHg"),
     "torrs": (133.3223120222, "mmHg"),
-    "millibar": (100.00, "mb" ),
-    "mbar": (100.00, "mb" ),
+    "millibar": (100.00, "mb"),
+    "mbar": (100.00, "mb"),
     "kilopascal": (1000.00, "KPa"),
     "kpa": (1000.00, "KPa"),
     "pounds": (6894.744825494, "PSI"),
@@ -127,17 +103,17 @@ units_error_tab = [
 def get_unit(unit_type, unit):
     """ look up unit params """
     if unit_type == "temp":
-         return temp_unit[unit]
+        return temp_unit[unit]
     elif unit_type == "mass":
-         return mass_unit[unit]
+        return mass_unit[unit]
     elif unit_type == "length":
-         return len_unit[unit]
+        return len_unit[unit]
     elif unit_type == "time":
-         return time_unit[unit]
+        return time_unit[unit]
     elif unit_type == "press":
-         return press_unit[unit]
+        return press_unit[unit]
     elif unit_type == "angle":
-         return angle_unit[unit]
+        return angle_unit[unit]
     else:
         return None
 
@@ -184,6 +160,7 @@ def unit_label(unit_type, unit):
         return rec[1]
     else:
         return ""
+
 
 def main():
     print(unit_label("time", "secs"))

@@ -43,27 +43,8 @@
 #define  N_H_MODE           35
 #define  N_H_HOME           36
 
-   typedef struct str_info
-   {
-      char  * dat ;
-   }  str_info ;
 
-   typedef struct log_info
-   {
-      int dat ;
-   }  log_info ;
-
-   typedef struct int_info
-   {
-      int dat ;
-   }  int_info ;
-
-   typedef struct dbl_info
-   {
-      char * inp  ;
-      char * unt  ;
-      double dat  ;
-   }  dbl_info ;
+#ifdef N_C
 
    typedef struct Mnemonics
    {
@@ -73,50 +54,6 @@
       int    Type ;
       int    Unit ;
    }  MneData ;
-
-   typedef struct StageBat
-   {
-      dbl_info stagedelay ;
-      dbl_info diameter ;
-      int_info numfins ;
-      dbl_info finthickness ;
-      dbl_info finspan ;
-      dbl_info drymass ;
-      dbl_info launchmass ;
-      dbl_info cd ;
-      str_info motorname ;
-      int_info nummotor ;
-   }  StageBat ;
-
-   typedef struct Rocket
-   {
-      str_info title ;
-      str_info home  ;
-      str_info units ;
-
-      int_info mode ;
-      dbl_info dtime ;
-      dbl_info printtime ;
-      str_info printcmd ;
-
-      dbl_info sitealt ;
-      dbl_info sitetemp ;
-      dbl_info sitepress ;
-      dbl_info theta ;
-      dbl_info finalalt ;
-      dbl_info coasttime ;
-      dbl_info raillength ;
-      str_info enginefile ;
-      str_info destination ;
-      str_info outfile ;
-
-      str_info nosetype ;
-      int_info numstages ;
-      StageBat stages [MAXSTAGE] ;
-
-   }  Rocket ;
-
-#ifdef N_C
 
    MneData Mnemons [ ] =
    {
@@ -178,26 +115,4 @@
       { "launchangle"    , "deg" , THETA       , UNITS_DOUBLE   , UNITS_ANGLE } 
    } ;
 
-#define  NUM_MNEMONS   ( sizeof ( Mnemons ) / sizeof ( MneData ))
 
-   void  AddBatStr ( str_info *, char * ) ;
-   void  AddBatInt ( int_info *, int ) ;
-   void  AddBatDbl ( dbl_info *, char *, char *, double ) ;
-   void  InitBat ( Rocket * ) ;
-   void  DumpBat ( Rocket * ) ;
-   void  ToDaMoonAlice () ;
-   void  BatchFlite ( char * ) ;
-
-#else
-
-   /* extern void  AddBatStr ( str_info *, char * ) ;                /* hide */
-   /* extern void  AddBatInt ( int_info *, int ) ;                   /* hide */
-   /* extern void  AddBatDbl ( dbl_info *, char *, char *, double ); /* hide */
-   /* extern void  InitBat ( Rocket * ) ;                            /* hide */
-   extern void  DumpBat ( Rocket * ) ;
-   extern void  ToDaMoonAlice () ;
-   extern void  BatchFlite ( char * ) ;
-
-#endif
-
-#endif
