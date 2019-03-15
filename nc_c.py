@@ -1,79 +1,27 @@
 import units
-
+import math
+import raspinfo
 
 VERSION = '4.2'
-#define INP_SIZE  2048
-#define MAXARG       8
+press_oride = False
 
-# static Rocket RaspBat ;
-# char NoBatStr [1] = { '\0' } ;
-# int PressOride = 0 ;
 
-# (void) FixPath ( RASP_FILE_LEN, ename, RaspBat.home, RaspBat.enginefile );
-
-class Dbl():
+class Dbl:
     def __init__(self, inp, unit):
         self.inp = inp
         self.unit = unit
     
     def __float__(self):
-        return float(inp)
-        
+        return float(self.inp)
+
+    def __str__(self):
+        return " ".join((self.inp, self.unit))
+
     def conv_unit(self, unit):
-        return units.conv_unit(float(inp))
-"""       
-   typedef struct dbl_info
-   {
-      char * inp  ;
-      char * unt  ;
-      double dat  ;
-   }  dbl_info ;
-
-   typedef struct StageBat
-   {
-      dbl_info stagedelay ;
-      dbl_info diameter ;
-      int_info numfins ;
-      dbl_info finthickness ;
-      dbl_info finspan ;
-      dbl_info drymass ;
-      dbl_info launchmass ;
-      dbl_info cd ;
-      str_info motorname ;
-      int_info nummotor ;
-   }  StageBat ;
-
-   typedef struct Rocket
-   {
-      str_info title ;
-      str_info home  ;
-      str_info units ;
-
-      int_info mode ;
-      dbl_info dtime ;
-      dbl_info printtime ;
-      str_info printcmd ;
-
-      dbl_info sitealt ;
-      dbl_info sitetemp ;
-      dbl_info sitepress ;
-      dbl_info theta ;
-      dbl_info finalalt ;
-      dbl_info coasttime ;
-      dbl_info raillength ;
-      str_info enginefile ;
-      str_info destination ;
-      str_info outfile ;
-
-      str_info nosetype ;
-      int_info numstages ;
-      StageBat stages [MAXSTAGE] ;
-
-   }  Rocket ;
-"""
+        return units.conv_unit(float(self.inp))
 
 
-class Stage():
+class StageBat:
     def __init__(self):
         self.stagedelay = Dbl("0.00", "sec")
         self.diameter = Dbl("0.00", "in")
@@ -87,13 +35,13 @@ class Stage():
         self.nummotor = 1
 
 
-class Rocket():
+class RocketBat:
     def __init__(self):
         self.title = "None"
         self.units = "FPS"
         self.mode = 1
         
-        self.home = EngHome    # v4.1
+        # self.home = eng_home    # v4.1
 
         self.dtime = Dbl("0.01", "sec")
         self.printtime = Dbl("0.1", "sec")
@@ -116,7 +64,44 @@ class Rocket():
         self.theta = Dbl("0.00", "deg")
         self.nosetype = "ogive"
 
-        self.stages.append(Stage())
+        self.stages = [Stage()]
+
+    def dump(self):
+        print("\nRASP Batch Dump\n")
+        print("BatStru->title       = %s", self.title)
+        print("BatStru->units       = %s", self.units)
+        print("BatStru->mode        = %d", self.mode)
+        print("BatStru->home        = %s", "NONE")  # self.home)
+        print("BatStru->dtime,      = %s", str(self.dtime))
+        print("BatStru->printtime   = %s", str(self.printtime))
+        print("BatStru->printcmd    = %s", self.printcmd)
+        print()
+        print("BatStru->sitealt     = %s", str(self.sitealt))
+        print("BatStru->sitetemp    = %s", str(self.sitetemp))
+        print("BatStru->sitepress   = %s", str(self.sitepress))
+        print("BatStru->raillength  = %s", str(self.raillength))
+        print("BatStru->theta       = %s", str(self.theta.inp))
+        print("BatStru->finalalt    = %s", str(self.finalalt))
+        print("BatStru->coasttime   = %s", str(self.coasttime))
+        print("BatStru->enginefile  = %s", self.enginefile)
+        print("BatStru->destination = %s", self.destination)
+        print("BatStru->outfile     = %s", self.outfile)
+        print("BatStru->nosetype    = %s", self.nosetype)
+        print("BatStru->numstages   = %d", len(self.stages))
+
+        for j, stage in enumerate(self.stages):
+            print()
+            print("   *** stage [%d] data ***\n" % j)
+            print("   diameter [%d]     = %s" % (j, stage.diameter))
+            print("   numfins [%d]      = %d" % (j, stage.numfins))
+            print("   finthickness [%d] = %s" % (j, stage.finthickness))
+            print("   finspan [%d]      = %s" % (j, stage.finspan))
+            print("   cd [%d]           = %s" % (j, stage.cd))
+            print("   drymass [%d]      = %s" % (j, stage.drymass))
+            print("   nummotor [%d]     = %d" % (j, stage.nummotor))
+            print("   motorname [%d]    = %s" % (j, stage.motorname))
+            print("   stagedelay [%d]   = %s" % (j, stage.stagedelay))
+            print("   launchmass [%d]   = %s" % (j, stage.launchmass))
 
 
 def to_da_moon_alice(rocket):
@@ -147,15 +132,15 @@ def to_da_moon_alice(rocket):
         baro_press = 1 - ( 0.00000688 * site_alt * M2FT )
         baro_press =  STD_ATM * exp ( 5.256 * log ( baro_press ))
     
-    mach1_0 = sqrt (MACH_CONST * base_temp)
-    Rho_0 = ( baro_press * IN2PASCAL ) / ( GAS_CONST_AIR * base_temp )
+    mach1_0 = math.sqrt (MACH_CONST * base_temp)
+    Rho_0 = (baro_press * IN2PASCAL) / (GAS_CONST_AIR * base_temp)
     
-    if sys.platform = "Windows"
+    if sys.platform == "Windows"
         if rocket.destination == "printer":
             fname = "CON"
         else:
             fname = "PRN"
-    elif platform = "Linux":
+    elif platform == "Linux":
         if rocket.destination == "printer":
             fname = "/dev/lp"
         else:
@@ -165,20 +150,12 @@ def to_da_moon_alice(rocket):
         fname = rocket.outfile
     
     for stage in rocket.stages:
-        mcode = stage.motorname, RASP_BUF_LEN )
-        
-        e = nexteng ++
-        
-        if findmotor(mcode, e ) <= 0 )
-        {
-         fprintf ( stderr, "Cannot find Motor:  %s\n", Mcode )
-         return
-        }
-        
+        e = raspinfo.findmotor(stage.motorname)
+
         stage.engcnum = e
-        stage.engnum  = rocket.stages [i].nummotor 
-        stage.weight  = rocket.stages [i].drymass
-        stage.maxd    = rocket.stages [i].diameter / IN2M
+        stage.engnum  = stage.nummotor
+        stage.weight  = stage.drymass
+        stage.maxd    = stage.diameter / IN2M
         
         fins.num       = rocket.stages [i].numfins
         fins [i].thickness = rocket.stages [i].finthickness / IN2M
@@ -214,141 +191,6 @@ def to_da_moon_alice(rocket):
 """
 
 
-void  DumpBat ( Rocket* BatStru )
-/* ------------------------------------------------------------------------ */
-{
-
-   int i, j
-
-   fprintf ( stderr, "\nRASP Batch Dump\n\n" )
-
-   fprintf ( stderr, "BatStru->title       = %s\n", BatStru->title )
-
-   fprintf ( stderr, "BatStru->units       = %s\n", BatStru->units )
-
-   fprintf ( stderr, "BatStru->mode        = %d\n", BatStru->mode  )
-
-   fprintf ( stderr, "BatStru->home        = %s\n", BatStru->home  )d
-
-   fprintf ( stderr, "BatStru->dtime,      = %s  %s  %.6f\n",
-                                           BatStru->dtime.inp,
-                                           BatStru->dtime.unt,
-                                           BatStru->dtime )
-
-   fprintf ( stderr, "BatStru->printtime   = %s  %s  %.6f\n",
-                                           BatStru->printtime.inp,
-                                           BatStru->printtime.unt,
-                                           BatStru->printtime )
-                                           
-   fprintf ( stderr, "BatStru->printcmd    = %s\n", BatStru->printcmd )
-
-   fprintf ( stderr, "\n" )
-
-   fprintf ( stderr, "BatStru->sitealt     = %s  %s  %.6f\n",
-                                           BatStru->sitealt.inp,
-                                           BatStru->sitealt.unt,
-                                           BatStru->sitealt ) ;
-
-   fprintf ( stderr, "BatStru->sitetemp    = %s  %s  %.6f\n",
-                                           BatStru->sitetemp.inp,
-                                           BatStru->sitetemp.unt,
-                                           BatStru->sitetemp ) ;
-
-   fprintf ( stderr, "BatStru->sitepress   = %s  %s  %.6f\n",
-                                           BatStru->sitepress.inp,
-                                           BatStru->sitepress.unt,
-                                           BatStru->sitepress ) ;
-
-   fprintf ( stderr, "BatStru->raillength  = %s  %s  %.6f\n",
-                                           BatStru->raillength.inp,
-                                           BatStru->raillength.unt,
-                                           BatStru->raillength ) ;
-
-   fprintf ( stderr, "BatStru->theta       = %s  %s  %.6f\n",
-                                           BatStru->theta.inp,
-                                           BatStru->theta.unt,
-                                           BatStru->theta ) ;
-
-   fprintf ( stderr, "BatStru->finalalt    = %s  %s  %.6f\n",
-                                           BatStru->finalalt.inp,
-                                           BatStru->finalalt.unt,
-                                           BatStru->finalalt ) ;
-
-   fprintf ( stderr, "BatStru->coasttime   = %s  %s  %.6f\n",
-                                           BatStru->coasttime.inp,
-                                           BatStru->coasttime.unt,
-                                           BatStru->coasttime ) ;
-
-   fprintf ( stderr, "BatStru->enginefile  = %s\n",
-                                           BatStru->enginefile ) ;
-
-   fprintf ( stderr, "BatStru->destination = %s\n",
-                                           BatStru->destination ) ;
-
-   fprintf ( stderr, "BatStru->outfile     = %s\n",
-                                           BatStru->outfile ) ;
-
-   fprintf ( stderr, "BatStru->nosetype    = %s\n",
-                                           BatStru->nosetype ) ;
-
-   fprintf ( stderr, "BatStru->numstages   = %d\n",
-                                           BatStru->numstages ) ;
-
-   for ( i = 0 ; i < ( BatStru->numstages ) ; i ++ )
-   {
-
-   j = i + 1 ;
-
-   fprintf ( stderr, "\n" ) ;
-
-   fprintf ( stderr, "   *** stage [%d] data ***\n\n", j ) ;
-
-   fprintf ( stderr, "   diameter [%d]     = %s  %s  %.6f\n", j,
-                                    BatStru->stages [i].diameter.inp,
-                                    BatStru->stages [i].diameter.unt,
-                                    BatStru->stages [i].diameter ) ;
-
-   fprintf ( stderr, "   numfins [%d]      = %d\n", j,
-                                    BatStru->stages [i].numfins ) ;
-
-   fprintf ( stderr, "   finthickness [%d] = %s  %s  %.6f\n", j,
-                                 BatStru->stages [i].finthickness.inp,
-                                 BatStru->stages [i].finthickness.unt,
-                                 BatStru->stages [i].finthickness ) ;
-
-   fprintf ( stderr, "   finspan [%d]      = %s  %s  %.6f\n", j,
-                                 BatStru->stages [i].finspan.inp,
-                                 BatStru->stages [i].finspan.unt,
-                                 BatStru->stages [i].finspan ) ;
-
-   fprintf ( stderr, "   cd [%d]           = %s  %s  %.6f\n", j,
-                                 BatStru->stages [i].cd.inp,
-                                 BatStru->stages [i].cd.unt,
-                                 BatStru->stages [i].cd ) ;
-
-   fprintf ( stderr, "   drymass [%d]      = %s  %s  %.6f\n", j,
-                                 BatStru->stages [i].drymass.inp,
-                                 BatStru->stages [i].drymass.unt,
-                                 BatStru->stages [i].drymass ) ;
-
-   fprintf ( stderr, "   nummotor [%d]     = %d\n", j,
-                                 BatStru->stages [i].nummotor ) ;
-
-   fprintf ( stderr, "   motorname [%d]    = %s\n", j,
-                                 BatStru->stages [i].motorname ) ;
-
-   fprintf ( stderr, "   stagedelay [%d]   = %s  %s  %.6f\n", j,
-                                    BatStru->stages [i].stagedelay.inp,
-                                    BatStru->stages [i].stagedelay.unt,
-                                    BatStru->stages [i].stagedelay ) ;
-
-   fprintf ( stderr, "   launchmass [%d]   = %s  %s  %.6f\n", j,
-                                 BatStru->stages [i].launchmass.inp,
-                                 BatStru->stages [i].launchmass.unt,
-                                 BatStru->stages [i].launchmass ) ;
-
-   }
-}
 /* ------------------------------------------------------------------------ */
 void  BatchFlite ( char * BatFile )
 /* ------------------------------------------------------------------------ */

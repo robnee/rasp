@@ -112,6 +112,50 @@ def load_engine(engine_file):
     return eng_info
     
 
+def find_motor(eng_file, mcode):
+   eng_info = load_engine(eng_file)
+
+   return eng_info[mcode]
+
+
+def get_motor(eng_file, prompt="Motor code")
+   while True:
+      s = input(prompt)
+
+      args = s.split()
+
+      if ( arg > 0 )
+         ToLower ( Word [ 0 ] ) ;
+
+      GotFile = 1 ;
+
+      if (( arg >= 3 ) && ( strcmp ( Word [ 0 ], "file" ) == 0 ))
+      {
+         /* v4.1 strcpy ( ename, Word [ 1 ] ) ; */
+
+         if ( access ( Word [1], R_OK ) == 0 )
+         {
+            strncpy ( ename, Word [ 1 ], RASP_FILE_LEN ) ;
+         }
+         else
+            GotFile = WhereIs ( RASP_FILE_LEN,
+                                ename, Word [1], RaspHome, PrgName );
+
+         strncpy ( Mcode, Word [ 2 ], RASP_BUF_LEN ) ;
+      }
+      else
+         strncpy ( Mcode, Word [ 0 ], RASP_BUF_LEN ) ;
+
+      if (( GotFile ) && ( findmotor ( Mcode, e ) > 0 ))
+         match = TRUE ;
+
+   } while (match == FALSE);
+
+   return (e);
+
+  }
+
+
 def print_engine_info(e):
     if e['wt'] >= 100.0:
         mm = "%6.2lf" % e['wt']
@@ -157,7 +201,7 @@ def print_engine_info(e):
     dxl = "%dx%d" % (e['diam'], e['dlen'])
     if args.csv:
         print("\"%s\",\"%s\",%s,%s,%.2lf,%s,%s,%s,\"%s\"" %
-         (e['code'], e['mfg'][:5], tot, avg, e['t2'], mx, mm, pm, dxl))
+              (e['code'], e['mfg'][:5], tot, avg, e['t2'], mx, mm, pm, dxl))
 
         for d in e['delay']:
             if d == 0:
@@ -168,8 +212,7 @@ def print_engine_info(e):
         print("\"\n")
     else:
         print("%-9s %-5s  %6s %6s %5.2lf  %6s  %6s  %6s %7s %s" %
-                (e['code'], e['mfg'][:5], tot, avg, e['t2'], mx, mm, pm, dxl, '-'.join(str(d) for d in e['delay'])))
-
+              (e['code'], e['mfg'][:5], tot, avg, e['t2'], mx, mm, pm, dxl, '-'.join(str(d) for d in e['delay'])))
 
 
 def print_engine_header():
@@ -187,21 +230,21 @@ def print_engine_header():
              "Impulse", "Thrust", 
              "Time", 
              "Thrust", "Mass", "Mass",
-             "\",\"" ))
+             "\",\""))
         
         print("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"" % (
              "Desig", "Mfg", 
              "(Nsec)", "(N)", 
              "(sec)", 
              "(N)", "(Kg)", "(Kg)",
-             "D x L\",\"Delays" ))
+             "D x L\",\"Delays"))
     else:
         print("%-9s %-5s  %6s %6s %5s  %6s  %6s  %6s %s %d" % (
              "", "", 
              "Total", "Avg", 
              "Burn", 
              "Peak", "Motor", "Prop",
-             "       Page ", Pages ))
+             "       Page ", Pages))
         
         print("%-9s %-5s %7s %6s %5s  %6s  %6s  %6s %s" % (
              "Motor", "Motor", 
