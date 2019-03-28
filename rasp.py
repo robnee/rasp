@@ -82,36 +82,200 @@
  */
 """
 
-#define RASP_C
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <string.h>
-#include <math.h>
+#define VERSION   "4.1b"
+#define MAXENG    5
+#define MAXT      256
+#define MAXSTAGE  5
 
-#ifdef UNIX
-#include <unistd.h>
+#define G         9.806650
+#define IN2M      0.0254
+#define GM2LB     0.00220462
+#define OZ2KG     0.028349523
+#define M2FT      3.280840
+#define IN2PASCAL 3386.39
+#define ROD       60 * IN2M   /* Length of launch rod in meters (60") */
+#define MACH0_8   265.168     /* Mach 0.8 in Meters/sec  870 ft/sec */
+#define MACH1     331.460     /* Mach 1.0 in Meters/sec  1086 ft/sec*/
+#define MACH1_2   397.752     /* Mach 1.2 in Meters/sec  1305 ft/sec */
+
+#define LAUNCHALT 0.00
+
+# kjh moved this from air.c to rasp.c
+#define TEMP_CORRECTION 1
+
+#define DT_DH            0.006499         /* degK per meter */
+#define DT_DF            0.001981         /* degK per foot */
+#define TEMP0            273.15   /* Temp of air at Std Density at Sea Level */
+#define S_L_RHO          1.29290          /* Density of Air at STP ( 0C ) */
+#define MAXALT           36093 * M2FT     /* Where the Stratosphere begins */
+#define STD_ATM          29.92            /* Standard Pressure */
+
+#define SPACEALT         43610            /* q&d fix */
+
+# Define the 1st character on non-data output lines. This forces output to be gnuplot compatible.
+
+# kjh added Mach Correction for Temp
+#define GAMMA           1.40109        /*  specific heat ratio of air */
+#define GAS_CONST_AIR   286.90124      /*   ( J / Kg*K )              */
+#define MACH_CONST      GAMMA * GAS_CONST_AIR     /* speed it up, bub */
+
+#define MAXINTLEN    6
+#define MAXLONGLEN   11
+#define MAXDBLLEN    17
+#define MAXSTRLEN    256
+
+#define DFILE "rasp.eng"
+
+NOSES = [
+    ("undefined", 1),
+    ("ogive", 1),
+    ("conic", 1),
+    ("elliptic", 2),
+    ("parabolic", 2),
+    ("blunt", 2),
+]
+
+
+class Fins:
+    def __init__(self):
+        self.num = 0         # Number of Fins / Stage
+        self.thickness = 0   # Max Thickness of Fin Stock
+        self.span = 0        # Max Span of Fins from BT
+        self.area = 0        # Computed Once to run faster
+
+
+class Stage:
+    def __init__(self):
+        self.engnum = 0      # number of engines in stage
+        self.start_burn = 0  # Start of engine (includes previous stage)
+        self.end_burn = 0    # End of engine burn  (includes previous stage)
+        self.end_stage = 0   # End of stage (includes previous stage)
+        self.drop_stage = 0  # When stage is dropped (includes previous stage)
+        self.weight = 0      # stage wt w/o engine
+        self.totalw = 0      # wt of stage w/ engine(s)
+        self.maxd = 0        # max diameter of stage
+        self.cd = 0          # kjh added cd per stage
+        self.fins = Fins()
+        self.o_wt = 0        # kjh added to remember weight run-to-run
+        self.e_info = None   #
+
+
+class Rocket:
+    def __init__(self):
+        self.nose = None
+        self.stages = []
+
+
+class Flight:
+    def __init__(self):
+        self.rocket = None
+        self.rocketwt = 0.0
+        self.drag_coff = 0.0
+        self.base_temp = 0.0
+        self.faren_temp = 0.0
+        self.mach1_0 = 0.0
+        self.site_alt = 0.0
+        self.baro_press = 0.0
+        self.rho_0 = 0.0
+        self.rod = 0.0
+        self.coast_base = 0.0
+
+
+"""
+
+/* kjh added this structure to make engine processing faster    */
+/* what we're gonna do is:  when the engine file is referenced, */
+/* open the file, read , ftell () and look for valid lines,     */
+/* of a valid line is found, save ftell () in motor.offset.     */
+/*                                                              */
+/* When a particular motor is referenced, search this list then */
+/* when found, use fseek() to jump forward to the header line.  */
+/*                                                              */
+/* Saved for later ...                                          */
+
+struct motor {
+    char  code[32];        /* engine name                                  */
+    int   dia;             /* engine diameter    (millimeters)             */
+    int   len;             /* engine length      (millimeters)             */
+    char  delay[32];       /* ejection delays available raw string data    */
+    double  pmass ;        /* pro mass                                     */
+    double  mmass ;        /* pro mass                                     */
+    char  mfg[32];         /* manufacturer info                            */
+    unsigned long offset ; /* byte index into .eng file                    */
+};
+
+struct engine {
+    double t2;             /* thrust duration    (seconds)                 */
+    double m2;             /* propellant wt.     (kilograms)               */
+    double wt;             /* initial engine wt. (kilograms)               */
+    double thrust[MAXT];   /* thrust curve     (Time-sec,Thrust-Newtons)   */
+    double navg;           /* average thrust     (newtons)                 */
+    double ntot;           /* total impulse      (newton-seconds)          */
+    double npeak;          /* peak thrust        (newtons)                 */
+    int   dia;             /* engine diameter    (millimeters)             */
+    int   len;             /* engine length      (millimeters)             */
+    int   delay[8];        /* ejection delays available (sec)              */
+    char  mfg[32];         /* manufacturer info                            */
+    char  code[32];        /* engine name                                  */
+};
+
+struct nose_cone {
+    char    * name ;    /* Verbose Nose Cone Name */
+    int       form ;    /* M,C&B Formula to Apply */
+};
+
+#define RASP_BUF_LEN    1024
+#define RASP_FILE_LEN   PATH_MAX + NAME_MAX + 2    /* from pathproc.h v4.1 */
+
+struct motor_entry {
+   char MEnt [ RASP_BUF_LEN + 1 ] ;
+} ;
+
+
+# Define the 1st character on non-data output lines. This forces
+# output to be gnuplot compatible.
+#ifdef VMS
+   char ch1 = '!';
+#else
+   char ch1 = '#';
 #endif
 
-#ifdef MSDOS
-#include <io.h>               /* DOS needs stack >= 4096 */
-#define access _access
-#define R_OK    4
-#endif
+   /*
+    * Global Variables
+    */
 
-#include "parse.h"
-#include "pathproc.h"
-#include "units.h"
-#include "rasp.h"
-#include "n.h"
+   char FloatChars [] = { "0123456789.EeFfGg+-" };
 
-double DragDiverge ( int Type, double Mach_1, double Velocity );
-int GetNose ( char* Prompt, int Default);
-int Proper ( char* OutStr, char* InStr );
-double ISAtemp ( double BaseTemp, double Alt );
+   int nexteng,      /* next free engine index */
+       destnum,      /* index into array of devices for output - dest */
+       stagenum;     /* number of stages */
+
+   char Mcode [ RASP_BUF_LEN + 1 ];  /* array to hold engine code */
+
+   char rname [ RASP_BUF_LEN + 1 ];  /* rocket name */
+   char oname [ RASP_BUF_LEN + 1 ];  /* old rocket name */
+   char bname [ RASP_FILE_LEN + 1 ]; /* output file base name for simulation */
+   char fname [ RASP_FILE_LEN + 1 ]; /* output file name for simulation */
+   char ename [ RASP_FILE_LEN + 1 ]; /* Holds Motor File Name */
+
+   char PrgName [ RASP_FILE_LEN + 1 ];  /* v4.1 -- program Name */
+   char EngHome [ RASP_FILE_LEN + 1 ];  /* v4.1 -- Engine  Home */
+   char * RaspHome ;                    /* v4.1 -- getenv ( "RASPHOME" ) */
+
+   FILE *stream,  *efile;
+
+   int verbose;
+
+   char DELIM [] = {" ,()" };
+
+"""
 
 
+def find_nose(nose):
+    return NOSES[nose]
+
+"""
 /* kjh moved this out of Choices () */
 /*************************************************************************/
 void dumpheader( double wt )
@@ -991,134 +1155,6 @@ int main ( int argc, char* argv[] )
    }
 }
 /***********************************************************************/
-int GetInt ( char * Prompt, int Default )
-/***********************************************************************/
-{
-
-   int GotOne = 0 ,
-      i, l ;
-   char  EntryStr [MAXSTRLEN + 1];
-
-   while ( ! GotOne )
-   {
-      fprintf ( stdout, "%s [%d]:  ", Prompt, Default )  ;
-      fgets ( EntryStr, MAXINTLEN, stdin ) ;
-
-      l = strlen ( EntryStr ) - 1 ;
-
-      EntryStr [l] = '\0' ;
-
-      GotOne = 1 ;
-
-      if ( l > 0 )
-      {
-         for ( i = 0 ; i < l ; i++ )
-         {
-            if ( ! ( isdigit ( EntryStr [ i ] )))
-            {
-/*             fprintf ( stderr, "\a\a\a" ) ;         */
-               GotOne = 0 ;
-            }
-         }
-      }
-   }
-
-   return (( l == 0 ) ? Default : atoi ( EntryStr ));
-
-}
-
-/***********************************************************************/
-int isfloat ( char* InStr )
-/***********************************************************************/
-{
-
-   char * p ;
-
-   for ( p = InStr ; p < ( InStr + strlen ( InStr )) ; p ++ )
-      if ( strchr ( FloatChars, * p ) == NULL )
-         return 0 ;
-
-   return -1 ;
-}
-/***********************************************************************/
-double GetDbl ( char* Prompt, double Default)
-/***********************************************************************/
-{
-
-   int GotOne = 0;
-   int l ;
-   char  EntryStr [MAXSTRLEN + 1];
-
-   while ( ! GotOne )
-   {
-      fprintf ( stdout, "%s [%.2f]:  ", Prompt, Default ) ;
-      fgets ( EntryStr, MAXDBLLEN, stdin ) ;
-
-      l = strlen ( EntryStr ) - 1 ;          /* fgets returns the \n */
-
-      EntryStr [l] = '\0' ;
-
-      GotOne = 1 ;
-
-      if ( l > 0 )
-      {
-         if ( ! ( isfloat ( EntryStr )))
-         {
-/*          fprintf ( stderr, "\a\a\a" ) ;      */
-            GotOne = 0 ;
-         }
-      }
-   }
-   return (( strlen ( EntryStr ) == 0 ) ? Default : atof ( EntryStr )) ;
-
-}
-/***********************************************************************/
-int GetStr ( char* Prompt, char* Default, int NumChr )
-/***********************************************************************/
-{
-   char  EntryStr [MAXSTRLEN + 1];
-
-   fprintf ( stdout, "%s [%s]:  ", Prompt, Default ) ;
-   fgets ( EntryStr, NumChr, stdin ) ;
-
-   EntryStr [ strlen ( EntryStr ) -1 ] = '\0' ;
-
-   if ( strlen ( EntryStr ) > 0 )
-      strncpy ( Default, EntryStr, NumChr ) ;
-
-   return ( strlen ( Default )) ;
-
-}
-/***********************************************************************/
-int FindNose ( char* nose )
-/***********************************************************************/
-{
-   int i, j, k, l ;
-
-   int GotOne = 0 ;
-
-   for ( i = 0 ; i < ( l = strlen ( nose )) ; i++ )
-      if ( isupper ( nose [i] ))
-         nose [i] = tolower ( nose [i] );
-
-   for ( i = 0 ; i < NUMNOSES ; i++ )
-   {
-      k = strlen ( Noses [ i ].name ) ;
-
-      for ( j = 0 ; ( j < l && j < k ) ; j++ )
-         if ( nose [ j ] != Noses [ i ].name [ j ] )
-            break ;
-
-      if ( j == l )
-      {
-         GotOne = i ;
-         break ;
-      }
-   }
-
-   return ( GotOne ) ;
-}
-/***********************************************************************/
 int GetNose ( char* Prompt, int Default)
 /***********************************************************************/
 {
@@ -1147,38 +1183,6 @@ int GetNose ( char* Prompt, int Default)
    }
    return ( GotOne ) ;
 
-}
-/***********************************************************************/
-int Proper ( char* OutStr, char* InStr )
-/***********************************************************************/
-{
-   int   i = 0,
-         l;
-
-   if (( l = strlen ( InStr )) > 0 )
-   {
-
-      if ( islower ( InStr [ i ] ))
-         OutStr [ i ] = toupper ( InStr [ i ] ) ;
-      else
-         OutStr [ i ] = InStr [ i ] ;
-
-      i ++ ;
-
-      while ( i < l )
-      {
-         if ( isupper ( InStr [ i ] ))
-            OutStr [ i ] = tolower ( InStr [ i ] ) ;
-         else
-            OutStr [ i ] = InStr [ i ] ;
-
-         i ++ ;
-      }
-   }
-
-   OutStr [ l ] = '\0' ;
-
-   return ( l ) ;
 }
 /***********************************************************************/
 double DragDiverge ( int Type, double Mach_1, double Velocity )
@@ -1272,261 +1276,4 @@ double ISAtemp ( double BaseTemp, double Alt )
    H [13] = 84852     ;  T [13] = 186.95  ; L [13] = -2.0
    */
 }
-
-
-#ifndef RASP_H
-
-#define RASP_H
-
-#define VERSION   "4.1b"
-#define TRUE      1
-#define FALSE     0
-#define MAXENG    5
-#define MAXT      256
-#define MAXSTAGE  5
-
-# if ! defined (M_PI)
-#  define M_PI       3.14159265358979323846
-# endif
-
-# if ! defined ( M_E)
-#  define M_E        2.7182818284590452354
-# endif
-
-#define G         9.806650
-#define IN2M      0.0254
-#define GM2LB     0.00220462
-#define OZ2KG     0.028349523
-#define M2FT      3.280840
-#define IN2PASCAL 3386.39
-#define ROD       60 * IN2M   /* Length of launch rod in meters (60") */
-#define MACH0_8   265.168     /* Mach 0.8 in Meters/sec  870 ft/sec */
-#define MACH1     331.460     /* Mach 1.0 in Meters/sec  1086 ft/sec*/
-#define MACH1_2   397.752     /* Mach 1.2 in Meters/sec  1305 ft/sec */
-
-#define LAUNCHALT 0.00
-
-/* kjh moved this from air.c to rasp.c */
-
-#define TEMP_CORRECTION 1
-
-#define DT_DH            0.006499         /* degK per meter */
-#define DT_DF            0.001981         /* degK per foot */
-#define TEMP0            273.15   /* Temp of air at Std Density at Sea Level */
-#define S_L_RHO          1.29290          /* Density of Air at STP ( 0C ) */
-#define MAXALT           36093 * M2FT     /* Where the Stratosphere begins */
-#define STD_ATM          29.92            /* Standard Pressure */
-
-#define SPACEALT         43610            /* q&d fix */
-
-/*
- * Define the 1st character on non-data output lines. This forces
- * output to be gnuplot compatible.
- */
-
-/*
- *  kjh added Mach Correction for Temp
- */
-#define GAMMA           1.40109        /*  specific heat ratio of air */
-#define GAS_CONST_AIR   286.90124      /*   ( J / Kg*K )              */
-#define MACH_CONST      GAMMA * GAS_CONST_AIR     /* speed it up, bub */
-
-#define MAXINTLEN    6
-#define MAXLONGLEN   11
-#define MAXDBLLEN    17
-#define MAXSTRLEN    256
-
-#define DFILE "rasp.eng"
-
-/* kjh added this structure to make engine processing faster    */
-/* what we're gonna do is:  when the engine file is referenced, */
-/* open the file, read , ftell () and look for valid lines,     */
-/* of a valid line is found, save ftell () in motor.offset.     */
-/*                                                              */
-/* When a particular motor is referenced, search this list then */
-/* when found, use fseek() to jump forward to the header line.  */
-/*                                                              */
-/* Saved for later ...                                          */
-
-struct motor {
-    char  code[32];        /* engine name                                  */
-    int   dia;             /* engine diameter    (millimeters)             */
-    int   len;             /* engine length      (millimeters)             */
-    char  delay[32];       /* ejection delays available raw string data    */
-    double  pmass ;        /* pro mass                                     */
-    double  mmass ;        /* pro mass                                     */
-    char  mfg[32];         /* manufacturer info                            */
-    unsigned long offset ; /* byte index into .eng file                    */
-};
-
-struct engine {
-    double t2;             /* thrust duration    (seconds)                 */
-    double m2;             /* propellant wt.     (kilograms)               */
-    double wt;             /* initial engine wt. (kilograms)               */
-    double thrust[MAXT];   /* thrust curve     (Time-sec,Thrust-Newtons)   */
-    double navg;           /* average thrust     (newtons)                 */
-    double ntot;           /* total impulse      (newton-seconds)          */
-    double npeak;          /* peak thrust        (newtons)                 */
-    int   dia;             /* engine diameter    (millimeters)             */
-    int   len;             /* engine length      (millimeters)             */
-    int   delay[8];        /* ejection delays available (sec)              */
-    char  mfg[32];         /* manufacturer info                            */
-    char  code[32];        /* engine name                                  */
-};
-
-struct stage_info {
-    int engcnum;        /* index into e_info */
-    int engnum;         /* # of engines in stage */
-    double start_burn;  /* Start of engine (includes previous stage) */
-    double end_burn;    /* End of engine burn  (includes previous stage) */
-    double end_stage;   /* End of stage (includes previous stage) */
-    double drop_stage;  /* When stage is dropped (includes previous stage) */
-    double weight;      /* stage wt w/o engine */
-    double totalw;      /* wt of stage w/ engine(s) */
-    double maxd;        /* max diameter of stage  */
-    double cd;          /* kjh added cd per stage */
-};
-
-struct fin_info {
-    int    num;         /* Number of Fins / Stage  */
-    double thickness;   /* Max Thickness of Fin Stock */
-    double span;        /* Max Span of Fins from BT */
-    double area;        /* Computed Once to run faster */
-};
-
-struct nose_cone {
-    char    * name ;    /* Verbose Nose Cone Name */
-    int       form ;    /* M,C&B Formula to Apply */
-};
-
-#define RASP_BUF_LEN    1024
-
-#define RASP_FILE_LEN   PATH_MAX + NAME_MAX + 2    /* from pathproc.h v4.1 */
-
-struct motor_entry {
-   char MEnt [ RASP_BUF_LEN + 1 ] ;
-} ;
-
-   int FindNose ( char* nose );
-   int findmotor ( char* Name, int e );
-   void dumpheader( double wt );
-   void calc ();
-
-#ifdef RASP_C
-
-   double   GetDbl ( char* Prompt, double Default );
-   int      GetStr ( char* Prompt, char* Default, int NumChr );
-   int      GetInt ( char * Prompt, int Default );
-
-   /*
-    * Define the 1st character on non-data output lines. This forces
-    * output to be gnuplot compatible.
-    */
-
-#ifdef VMS
-   char ch1 = '!';
-#else
-   char ch1 = '#';
-#endif
-
-   /*
-    * Global Variables
-    */
-
-   int verbose = TRUE;
-   double rocketwt;
-   double drag_coff;
-   double base_temp;
-   double faren_temp ;
-   double mach1_0;
-   double site_alt ;
-   double baro_press ;
-   double Rho_0 ;
-   double Rod ;
-   double coast_base;
-
-   char  PROMPT [ 81 ] ;
-   char FloatChars [] = { "0123456789.EeFfGg+-" };
-
-   int nexteng,      /* next free engine index */
-       destnum,      /* index into array of devices for output - dest */
-       stagenum;     /* number of stages */
-
-   char Mcode [ RASP_BUF_LEN + 1 ];  /* array to hold engine code */
-
-   char rname [ RASP_BUF_LEN + 1 ];  /* rocket name */
-   char oname [ RASP_BUF_LEN + 1 ];  /* old rocket name */
-   char bname [ RASP_FILE_LEN + 1 ]; /* output file base name for simulation */
-   char fname [ RASP_FILE_LEN + 1 ]; /* output file name for simulation */
-   char ename [ RASP_FILE_LEN + 1 ]; /* Holds Motor File Name */
-
-   char PrgName [ RASP_FILE_LEN + 1 ];  /* v4.1 -- program Name */
-   char EngHome [ RASP_FILE_LEN + 1 ];  /* v4.1 -- Engine  Home */
-   char * RaspHome ;                    /* v4.1 -- getenv ( "RASPHOME" ) */
-
-   FILE *stream,  *efile;
-
-   struct nose_cone Noses [ ] =
-   {
-      { "undefined",      1 } ,
-      { "ogive",          1 } ,
-      { "conic",          1 } ,
-      { "elliptic",       2 } ,
-      { "parabolic",      2 } ,
-      { "blunt",          2 }
-   } ;
-
-#define NUMNOSES ( sizeof Noses / sizeof ( struct nose_cone ))
-
-   int Nose ;
-   struct stage_info stages [ MAXSTAGE+1 ];
-   struct engine     e_info [ MAXENG+1 ];
-   struct fin_info   fins [ MAXSTAGE+1 ];
-   double o_wt [ MAXSTAGE+1 ] ;  /* kjh added to remember weight run-to-run */
-   struct motor_entry MLines [ MAXSTAGE+1 ] ;
-
-   char DELIM [] = {" ,()" };
-
-#else /* n.c decls */
-
-   extern int verbose ;
-   extern double rocketwt;
-   extern double drag_coff;
-   extern double base_temp;
-   extern double faren_temp ;
-   extern double mach1_0;
-   extern double site_alt ;
-   extern double baro_press ;
-   extern double Rho_0 ;
-   extern double Rod ;
-   extern double coast_base;
-
-   extern int nexteng,     /* next free engine index */
-              destnum,     /* index into array of devices for output - dest */
-              stagenum;    /* number of stages */
-
-   extern char Mcode [];      /* array to hold engine code */
-
-   extern char rname [];      /* rocket name */
-   extern char oname [];      /* old rocket name */
-   extern char bname [];      /* output file base name for simulation */
-   extern char fname [];      /* output file name for simulation */
-   extern char ename [];      /* Holds Motor File Name */
-
-   extern char PrgName [];    /* v4.1 -- program Name ( fqpn ) */
-   extern char EngHome [];    /* v4.1 -- engine file Home Dir ( rasp.eng ) */
-   extern char * RaspHome ;   /* v4.1 -- getenv ( "RASPHOME" ) */
-
-   extern FILE *stream,  *efile;
-
-   extern struct nose_cone Noses [] ;
-
-   extern int Nose ;
-   extern struct stage_info stages [] ;
-   extern struct engine     e_info [] ;
-   extern struct fin_info   fins [] ;
-   extern double o_wt [] ;            /* added to remember weight run-to-run */
-   extern struct motor_entry MLines [] ;
-
-#endif
-#endif
+"""

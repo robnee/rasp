@@ -61,25 +61,17 @@ def load_engine(engine_file):
                 except ValueError as e:
                     print("\n*** Error - Bad line in %s\n%s\n*** [%s]" %
                           (engine_file, e, line))
-                    print("    Motor Code:  %s" % code)
-                    print("    Diameter:    %d" % diam)
-                    print("    Length:      %d" % dlen)
-                    print("    Delays:      %s" % sdelay)
-                    print("    ProMass:     %lf" % m2)
-                    print("    MotMass:     %lf" % wt)
-                    print("    Mfg Notes:   %s" % mfg)
-
                     sys.exit(0)
 
-                e_info = {}
-                e_info['code'] = code
-                e_info['diam'] = math.ceil(float(diam))
-                e_info['dlen'] = math.ceil(float(dlen))
-                e_info['m2'] = float(m2)
-                e_info['wt'] = float(wt)
-                e_info['mfg'] = mfg
-                e_info['thrust'] = []
-
+                e_info = {
+                    'code': code,
+                    'diam': math.ceil(float(diam)),
+                    'dlen': math.ceil(float(dlen)),
+                    'm2': float(m2),
+                    'wt': float(wt),
+                    'mfg': mfg,
+                    'thrust': [],
+                }
                 parsing_thrust = True
             else:
                 t, thrust = [float(v) for v in line.strip().split()]
@@ -113,47 +105,26 @@ def load_engine(engine_file):
     
 
 def find_motor(eng_file, mcode):
-   eng_info = load_engine(eng_file)
+    eng_info = load_engine(eng_file)
 
-   return eng_info[mcode]
+    return eng_info[mcode]
 
 
-def get_motor(eng_file, prompt="Motor code")
-   while True:
-      s = input(prompt)
+def get_motor(eng_file, prompt="Motor code"):
+    while True:
+        s = input(prompt)
 
-      args = s.split()
+        words = s.split()
 
-      if ( arg > 0 )
-         ToLower ( Word [ 0 ] ) ;
+        if len(words) == 3 and words[0].lower() == "file":
+            _, filename, mcode = words
+        else:
+            filename = eng_file
+            mcode = words[0]
 
-      GotFile = 1 ;
-
-      if (( arg >= 3 ) && ( strcmp ( Word [ 0 ], "file" ) == 0 ))
-      {
-         /* v4.1 strcpy ( ename, Word [ 1 ] ) ; */
-
-         if ( access ( Word [1], R_OK ) == 0 )
-         {
-            strncpy ( ename, Word [ 1 ], RASP_FILE_LEN ) ;
-         }
-         else
-            GotFile = WhereIs ( RASP_FILE_LEN,
-                                ename, Word [1], RaspHome, PrgName );
-
-         strncpy ( Mcode, Word [ 2 ], RASP_BUF_LEN ) ;
-      }
-      else
-         strncpy ( Mcode, Word [ 0 ], RASP_BUF_LEN ) ;
-
-      if (( GotFile ) && ( findmotor ( Mcode, e ) > 0 ))
-         match = TRUE ;
-
-   } while (match == FALSE);
-
-   return (e);
-
-  }
+        motor = find_motor(filename, mcode)
+        if motor:
+            return motor
 
 
 def print_engine_info(e):

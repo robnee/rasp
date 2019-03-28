@@ -1,9 +1,125 @@
 import units
 import math
 import raspinfo
+import rasp
 
 VERSION = '4.2'
 press_oride = False
+
+
+# TODO: Convert this to python
+
+#define  N_H_NONE            0
+
+#define  "UNITS"           1
+#define  N_H_QUIET           2
+#define  N_H_VERBOSE         3
+#define  DTIME               4
+#define  PRINTTIME           5
+#define  PRINTCMD            6
+
+#define  SITEALT             7
+#define  SITETEMP            8
+#define  SITEPRESS           9
+#define  FINALALT            0
+#define  RAILLENGTH         11
+#define  ENGINEFILE         12
+
+#define  NUMSTAGES          13
+#define  NOSETYPE           14
+#define  STAGE              15
+#define  STAGEDELAY         16
+#define  DIAMETER           17
+#define  NUMFINS            18
+#define  FINTHICKNESS       19
+#define  FINSPAN            20
+#define  DRYMASS            21
+#define  LAUNCHMASS         22
+#define  CD                 23
+#define  MOTORNAME          24
+#define  NUMMOTOR           25
+#define  DESTINATION        26
+#define  OUTFILE            27
+#define  THETA              28
+#define  LAUNCH             29
+#define  N_H_QUIT           30
+#define  N_H_DEBUG          31
+#define  N_H_DUMP           32
+#define  TITLE              33
+#define  COASTTIME          34
+#define  N_H_MODE           35
+#define  N_H_HOME           36
+
+# Todo: make this a named_tuple
+"""
+typedef struct Mnemonics
+   {
+      char  * Tag ;
+      char  * Dfu ;
+      int     Ndx ;
+      int    Type ;
+      int    Unit ;
+   }  MneData ;
+"""
+
+MNEMONICS = [
+      ( "none"           , ""    , "NONE"    , UNITS_NONE     , UNITS_NONE ) ,
+      ( "home"           , ""    , "HOME"    , UNITS_STRING   , UNITS_NONE ) ,
+      ( "homedir"        , ""    , "HOME"    , UNITS_STRING   , UNITS_NONE ) ,
+      ( "rasphome"       , ""    , "HOME"    , UNITS_STRING   , UNITS_NONE ) ,
+      ( "raspdir"        , ""    , "HOME"    , UNITS_STRING   , UNITS_NONE ) ,
+      ( "units"          , ""    , "UNITS"   , UNITS_STRING   , UNITS_NONE ) ,
+      ( "mode"           , ""    , "MODE"    , UNITS_STRING   , UNITS_NONE ) ,
+      ( "quiet"          , ""    , "QUIET"   , UNITS_INTEGER  , UNITS_NONE ) ,
+      ( "summary"        , ""    , "QUIET"   , UNITS_INTEGER  , UNITS_NONE ) ,
+      ( "verbose"        , ""    , "VERBOSE" , UNITS_INTEGER  , UNITS_NONE ) ,
+      ( "detail"         , ""    , "VERBOSE" , UNITS_INTEGER  , UNITS_NONE ) ,
+      ( "launch"         , ""    , "LAUNCH"  , UNITS_NONE     , UNITS_NONE ) ,
+      ( "quit"           , ""    , "QUIT"    , UNITS_NONE     , UNITS_NONE ) ,
+      ( "done"           , ""    , "QUIT"    , UNITS_NONE     , UNITS_NONE ) ,
+      ( "exit"           , ""    , "QUIT"    , UNITS_NONE     , UNITS_NONE ) ,
+      ( "debug"          , ""    , "DEBUG"   , UNITS_INTEGER  , UNITS_NONE ) ,
+      ( "dump"           , ""    , "DUMP"    , UNITS_NONE     , UNITS_NONE ),
+      ( "title"          , ""    , "TITLE"   , UNITS_NONE     , UNITS_NONE ),
+
+      ( "dtime"          , "sec" , DTIME       , UNITS_DOUBLE   , UNITS_TIME ),
+      ( "printtime"      , "sec" , PRINTTIME   , UNITS_DOUBLE   , UNITS_TIME ),
+      ( "printcommand"   , ""    , PRINTCMD    , UNITS_STRING   , UNITS_NONE ),
+
+      ( "sitealtitude"   , "ft"  , SITEALT     , UNITS_DOUBLE   , UNITS_LENGTH ),
+      ( "finalaltitude"  , "ft"  , FINALALT    , UNITS_DOUBLE   , UNITS_LENGTH ),
+      ( "coasttime"      , "sec" , COASTTIME   , UNITS_DOUBLE   , UNITS_TIME ),
+      ( "sitetemperature", "F"   , SITETEMP    , UNITS_DOUBLE   , UNITS_TEMP ),
+      ( "sitepressure"   , "inHg", SITEPRESS   , UNITS_DOUBLE   , UNITS_PRESS ),
+      ( "raillength"     , "in"  , RAILLENGTH  , UNITS_DOUBLE   , UNITS_LENGTH ),
+      ( "rodlength"      , "in"  , RAILLENGTH  , UNITS_DOUBLE   , UNITS_LENGTH ),
+      ( "enginefile"     , ""    , ENGINEFILE  , UNITS_FILENAME , UNITS_EXISTS ),
+      ( "motorfile"      , ""    , ENGINEFILE  , UNITS_FILENAME , UNITS_EXISTS ),
+
+      ( "numstages"      , ""    , NUMSTAGES   , UNITS_INTEGER  , UNITS_NONE ),
+      ( "nosetype"       , ""    , NOSETYPE    , UNITS_STRING   , UNITS_NONE ),
+      ( "stage"          , ""    , STAGE       , UNITS_INTEGER  , UNITS_NONE ),
+      ( "stagedelay"     , "sec" , STAGEDELAY  , UNITS_DOUBLE   , UNITS_TIME ),
+      ( "diameter"       , "in"  , DIAMETER    , UNITS_DOUBLE   , UNITS_LENGTH ),
+      ( "numfins"        , ""    , NUMFINS     , UNITS_INTEGER  , UNITS_NONE ),
+      ( "finthickness"   , "in"  , FINTHICKNESS, UNITS_DOUBLE   , UNITS_LENGTH ),
+      ( "finspan"        , "in"  , FINSPAN     , UNITS_DOUBLE   , UNITS_LENGTH ),
+      ( "drymass"        , "oz"  , DRYMASS     , UNITS_DOUBLE   , UNITS_MASS ),
+      ( "dmass"          , "oz"  , DRYMASS     , UNITS_DOUBLE   , UNITS_MASS ),
+      ( "mass"           , "oz"  , DRYMASS     , UNITS_DOUBLE   , UNITS_MASS ),
+      ( "launchmass"     , "oz"  , LAUNCHMASS  , UNITS_DOUBLE   , UNITS_MASS ),
+      ( "lmass"          , "oz"  , LAUNCHMASS  , UNITS_DOUBLE   , UNITS_MASS ),
+      ( "cd"             , ""    , CD          , UNITS_DOUBLE   , UNITS_NONE ),
+      ( "motorname"      , ""    , MOTORNAME   , UNITS_STRING   , UNITS_NONE ),
+      ( "enginename"     , ""    , MOTORNAME   , UNITS_STRING   , UNITS_NONE ),
+      ( "nummotor"       , ""    , NUMMOTOR    , UNITS_INTEGER  , UNITS_NONE ),
+      ( "numengine"      , ""    , NUMMOTOR    , UNITS_INTEGER  , UNITS_NONE ),
+      ( "destination"    , ""    , DESTINATION , UNITS_STRING   , UNITS_NONE ),
+      ( "outfile"        , ""    , OUTFILE     , UNITS_FILENAME , UNITS_NONE ),
+      ( "outputfile"     , ""    , OUTFILE     , UNITS_FILENAME , UNITS_NONE ),
+      ( "theta"          , "deg" , THETA       , UNITS_DOUBLE   , UNITS_ANGLE ),
+      ( "launchangle"    , "deg" , THETA       , UNITS_DOUBLE   , UNITS_ANGLE ),
+]
 
 
 class Dbl:
@@ -105,6 +221,7 @@ class RocketBat:
 
 
 def to_da_moon_alice(rocket):
+
     wt = 0.0
     nexteng = 0
     rocketwt = 0.0
@@ -117,15 +234,17 @@ def to_da_moon_alice(rocket):
         verbose = True
     else:
         verbose = False
-    
-    nose = find_nose(rocket.nosetype)
+
+    # Todo: check this
+    nose = rasp.find_nose(rocket.nosetype)
     stagenum = len(rocket.stages)
     
     site_alt = rocket.sitealt
     coast_base = rocket.coasttime    
     base_temp = rocket.sitetemp
     rod = rocket.raillength
-    
+
+    # todo: PressOride is a global.  Better way?
     if PressOride:
         baro_press = rocket.sitepress / IN2PASCAL
     else:
@@ -135,7 +254,7 @@ def to_da_moon_alice(rocket):
     mach1_0 = math.sqrt (MACH_CONST * base_temp)
     Rho_0 = (baro_press * IN2PASCAL) / (GAS_CONST_AIR * base_temp)
     
-    if sys.platform == "Windows"
+    if sys.platform == "Windows":
         if rocket.destination == "printer":
             fname = "CON"
         else:
