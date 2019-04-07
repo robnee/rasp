@@ -82,43 +82,46 @@
  */
 """
 
+import math
+import raspinfo
 
-#define VERSION   "4.1b"
-#define MAXENG    5
-#define MAXT      256
-#define MAXSTAGE  5
+VERSION = "4.1b"
 
-#define G         9.806650
-#define IN2M      0.0254
-#define GM2LB     0.00220462
-#define OZ2KG     0.028349523
-#define M2FT      3.280840
-#define IN2PASCAL 3386.39
-#define ROD       60 * IN2M   /* Length of launch rod in meters (60") */
-#define MACH0_8   265.168     /* Mach 0.8 in Meters/sec  870 ft/sec */
-#define MACH1     331.460     /* Mach 1.0 in Meters/sec  1086 ft/sec*/
-#define MACH1_2   397.752     /* Mach 1.2 in Meters/sec  1305 ft/sec */
+# TODO: Use units.py
+# Conversion constants
+IN2M = 0.0254
+GM2LB = 0.00220462
+OZ2KG = 0.028349523
+M2FT = 3.280840
+IN2PASCAL = 3386.39
 
-#define LAUNCHALT 0.00
+ROD = 60 * IN2M    # Length of launch rod in meters (60")
+MACH0_8 = 265.168  # Mach 0.8 in Meters/sec  870 ft/sec
+MACH1 = 331.460    # Mach 1.0 in Meters/sec  1086 ft/sec
+MACH1_2 = 397.752  # Mach 1.2 in Meters/sec  1305 ft/sec
 
 # kjh moved this from air.c to rasp.c
-#define TEMP_CORRECTION 1
+TEMP_CORRECTION = 1
 
-#define DT_DH            0.006499         /* degK per meter */
-#define DT_DF            0.001981         /* degK per foot */
-#define TEMP0            273.15   /* Temp of air at Std Density at Sea Level */
-#define S_L_RHO          1.29290          /* Density of Air at STP ( 0C ) */
-#define MAXALT           36093 * M2FT     /* Where the Stratosphere begins */
-#define STD_ATM          29.92            /* Standard Pressure */
+G = 9.806650
+DT_DH = 0.006499   # degK per meter
+DT_DF = 0.001981   # degK per foot
+TEMP0 = 273.15     # Temp of air at Std Density at Sea Level
+S_L_RHO = 1.29290  # Density of Air at STP ( 0C )
+STD_ATM = 29.92    # Standard Pressure
 
-#define SPACEALT         43610            /* q&d fix */
+LAUNCHALT = 0.00
+MAXALT = 118415    # Where the Stratosphere begins (ft)
+SPACEALT = 43610   # q&d fix
 
 # Define the 1st character on non-data output lines. This forces output to be gnuplot compatible.
 
 # kjh added Mach Correction for Temp
-#define GAMMA           1.40109        /*  specific heat ratio of air */
-#define GAS_CONST_AIR   286.90124      /*   ( J / Kg*K )              */
-#define MACH_CONST      GAMMA * GAS_CONST_AIR     /* speed it up, bub */
+GAMMA = 1.40109                     # specific heat ratio of air
+GAS_CONST_AIR = 286.90124           # ( J / Kg*K )
+MACH_CONST = GAMMA * GAS_CONST_AIR
+
+CH1 = '#'
 
 #define MAXINTLEN    6
 #define MAXLONGLEN   11
@@ -153,12 +156,10 @@ class Stage:
         self.end_stage = 0   # End of stage (includes previous stage)
         self.drop_stage = 0  # When stage is dropped (includes previous stage)
         self.weight = 0      # stage wt w/o engine
-        self.totalw = 0      # wt of stage w/ engine(s)
         self.maxd = 0        # max diameter of stage
         self.cd = 0          # kjh added cd per stage
         self.fins = Fins()
         self.o_wt = 0        # kjh added to remember weight run-to-run
-        self.e_info = None   #
 
 
 class Rocket:
@@ -170,6 +171,11 @@ class Rocket:
 class Flight:
     def __init__(self):
         self.rocket = None
+        self.rname = None
+        self.ename = None
+        self.e_info = None  #
+
+        self.verbose = False
         self.rocketwt = 0.0
         self.drag_coff = 0.0
         self.base_temp = 0.0
@@ -275,58 +281,52 @@ struct motor_entry {
 def find_nose(nose):
     return NOSES[nose]
 
+
+def dump_header(fp, flight):
+    print(CH1, file=fp)
+
+    print("%c Rocket Name: %s" % (CH1, flight.rname), file=fp)
+    print("%c Motor File:  %s" % (CH1, flight.ename), file=fp)
+
+    wt = flight.rocketwt
+    for i, stage in enumerate(flight.rocket.stages):
+        print(CH1, file=fp)
+        print("%c%5s  %-16s  %8s  %8s  %8s  %9s" % (
+          CH1, "Stage", "Engine", "Bare", "Launch", "AirFrame", "Effective"), file=fp)
+
+        print("%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
+          CH1, "Num", "(Qt) Type", "Weight", "Weight", "Diameter",
+          "Diameter", "Cd"), file=fp)
+
+        print("%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
+          CH1, "=====", "================", "========", "========",
+          "========", "=========", "====="), file=fp)
+
+        print("%c%5d  (%1d) %-12s  %8.2f  %8.2f  %8.3f  %9.3f  %5.3f" % (
+          CH1, i + 1, stage.engnum, flight.e_info[i].code,
+          stage.weight / OZ2KG, flight.rocketwt / OZ2KG, stage.maxd,
+          stage.maxd + math.sqrt(stage.fins.area / (IN2M * IN2M * math.pi)) / 2,
+          stage.cd), file=fp)
+
+        wt -= stage.weight + flight.e_info[i].wt * stage.engnum
+
+        raspinfo.print_engine_info(flight.e_info[i])
+
+    if flight.verbose:
+        print(CH1, file=fp)
+        print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+            CH1, "Time", "Altitude", "Velocity", "Accel",
+            "Weight", "Thrust", "Drag"), file=fp)
+        print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+            CH1, "(Sec)", "(Feet)", "(Feet/Sec)", "(Ft/Sec^2)",
+            "(Grams)", "(Newtons)", "(Newtons)"), file=fp)
+        print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+            CH1, "-----", "---------", "---------", "---------",
+            "-----------", "---------", "---------"), file=fp)
+
+
 """
-/* kjh moved this out of Choices () */
-/*************************************************************************/
-void dumpheader( double wt )
-/*************************************************************************/
-{
-   int i;
 
-   fprintf ( stream, "%c\n",ch1 );
-
-   fprintf ( stream,"%cRocket Name:  %s\n", ch1, rname ) ;
-   fprintf ( stream,"%cMotor File:   %s\n", ch1, ename ) ;
-
-   for (i = 0; i < stagenum; i++)
-   {
-      fprintf ( stream, "%c\n",ch1 );
-
-      fprintf ( stream,"%c%5s  %-16s  %8s  %8s  %8s  %9s\n",
-         ch1,"Stage","Engine","Bare","Launch","AirFrame","Effective" );
-
-      fprintf ( stream,"%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s\n",
-         ch1,"Num","(Qt) Type","Weight","Weight","Diameter","Diameter", "Cd" );
-
-      fprintf ( stream,"%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s\n",
-         ch1,"=====","================","========","========","========","=========","=====" );
-
-      fprintf(stream, "%c%5d  (%1d) %-12s  %8.2f  %8.2f  %8.3f  %9.3f  %5.3f\n",
-         ch1, i + 1, stages[i].engnum, e_info[stages[i].engcnum].code,
-         stages[i].weight / OZ2KG, wt / OZ2KG, stages[i].maxd,
-            (stages[i].maxd + ( sqrt (    fins[i].area /
-                                        ( IN2M*IN2M*M_PI )) / 2 )),
-             stages[i].cd );
-
-     wt -= stages[i].totalw;
-
-     print_engine_info(stages[i].engcnum);
-
-   }
-
-   if (verbose)
-   {
-     fprintf(stream, "%c\n%c%4s %10s %10s %10s %11s %10s %10s\n", ch1, ch1,
-             "Time", "Altitude", "Velocity","Accel", "Weight", "Thrust", "Drag");
-     fprintf(stream, "%c%4s %10s %10s %10s %11s %10s %10s\n", ch1,
-             "(Sec)", "(Feet)", "(Feet/Sec)", "(Ft/Sec^2)", "(Grams)", "(Newtons)" , "(Newtons)");
-     fprintf(stream, "%c%4s %10s %10s %10s %11s %10s %10s\n", ch1,
-             "-----", "---------", "---------", "---------", "-----------", "---------", "---------");
-   }
-/* else
-      fprintf ( stream, "%c\n", ch1 );
- */
-}
 
 /*************************************************************************/
 void choices()
@@ -581,11 +581,14 @@ void choices()
    dumpheader ( wt ) ;
 }
 
-/*************************************************************************/
-void calc()
-/*************************************************************************/
-{
+"""
 
+
+def calc(flight):
+    pass
+
+
+"""
    int j;                                   /* iteration variable */
    int thrust_index = 0;                    /* index into engine table */
    int stage_engcnum,                       /* engcnum for current stage */
