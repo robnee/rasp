@@ -524,7 +524,7 @@ void choices()
 
       if ( destnum == 1 )
          strncpy ( fname, "CON", RASP_FILE_LEN );
-      else if ( destnum == 2 )
+      elif destnum == 2 )
          strncpy ( fname, "PRN", RASP_FILE_LEN );
 
 #endif
@@ -533,7 +533,7 @@ void choices()
 
       if ( destnum == 1 )
          strncpy ( fname, "/dev/tty", RASP_FILE_LEN ) ;
-      else if ( destnum == 2 )
+      elif destnum == 2 )
          strncpy ( fname, "/dev/lp", RASP_FILE_LEN );
 
 #endif
@@ -542,7 +542,7 @@ void choices()
 
       if ( destnum == 1 )
          strncpy ( fname, "TT:", RASP_FILE_LEN );
-      else if ( destnum == 2 )
+      elif destnum == 2 )
          strncpy ( fname, "LP:", RASP_FILE_LEN );
 
 #endif
@@ -585,126 +585,111 @@ void choices()
 
 
 def calc(flight):
-    pass
+    thrust_index = 0                  # index into engine table
+    stage_engcnum = 0                 # engcnum for current stage
+    this_stage = 0                    # current stage
+    stage_time = 0.0                  # elapsed time for current stage
+    burn_time = 0.0                   # Elapsed time for motor burn
+    stage_wt = 0.0                    # current wt of this_stage
+    stage_diam = 0.0                  # max diam at current time
+    t_rod = 0.0                       # launch rod info
+    v_rod = 0.0
+    cc = 0
+    drag_bias = 0
+    thrust = 0.0                      # Thrust
+    vel = 0.0                         # Velocity
+    accel = 0.0                       # Acceleration
+    alt = LAUNCHALT                   # Altitude
+    print_vel = False
+    print_alt = False
+    print_accel = False
+    print_mass = False                # used for printing
+
+    mass = 0.0
+    t = 0.000000
+    max_accel = 0.0
+    t_max_accel = 0.0
+    min_accel = 0.0
+    t_min_accel = 0.0
+    max_vel = 0.0
+    t_max_vel = 0.0
+    max_alt = 0.0                     # kjh added to save max alt
+    max_t = 0.0                       # kjh added to save time to max alt
+    drag = 0.0                        # kjh added to print Drag in Nt
+
+    old_vel = 0.0                     # kjh added to avg vel in interval
+    avg_vel = 0.0                     # kjh ditto
+
+    sum_o_thrust = 0.0                # kjh added to reduce pro mass ~ thrust
+
+    old_thrust = 0.0                  # last engine thrust  from table
+    old_time = 0.0                    # last engine thrust time  from table
+
+    print_index = 0                   # used for print loop
+    launched = 0                      # indicates rocket has lifted off
+
+    delta_t = 0.001                   # Time interval - 1us
+    ten_over_delta_t = 100
+    r = Rho_0                         # rho == Air Density for drag calc
+
+# double air_density()                # kjh put this inline
+
+    drag_constant = 0.0               # compute once-per-stage
+    coast_time = 0.00                 # kjh to coast after burnout
+
+    vcoff = 0.00
+    acoff = 0.00
+    tcoff = 0.00                      # kjh added for cutoff data
+
+    dT = 0                            # change in temp vs altitude
+
+    stage_wt = stages[this_stage].totalw
+
+    stage_engcnum = stages[this_stage].engcnum
+    mass = rocketwt
+
+   
+#  for ( j=0 ; j < stagenum ; j++ )
+#     fprintf ( stream, "%cStage Weight [%d]:  %9.4f\n", ch1, j, stages[j].totalw );
+
+   # What is the effective Diameter
+
+    prev_stage = None
+    for stage in flight.rocket.stages:
+        stage_diam = stage.maxd
+        drag_coff = stage.cd          # kjh Added This
+
+        if prev_stage:
+            if stage_diam < prev_stage.maxd:
+                stage_diam = prev_stage.maxd
+
+            if drag_coff < prev_stage.cd:        # kjh added this too
+                drag_coff = prev_stage.cd
 
 
+    d = stage_diam * IN2M
+
+    # c = r * M_PI * drag_coff * d * d * 0.125;
+
+    drag_constant = 0.5 * drag_coff * ((M_PI * d * d * 0.25) + fins[this_stage].area)
+
+    c = r * drag_constant
+
+    # kjh wants to see thrust at t=0 if there is any ...
+
+    if e_info[0].thrust[0] == 0.0:       # .thrust [ evens ] = Time
+        thrust = e_info[0].thrust[1]     # .thrust [ odds ] = Thrust
+
+        if thrust != 0.0:
+            accel  = (( thrust - drag ) / mass) - G
+        else:
+            accel = 0.0
+
+        print_alt = alt * M2FT
+        print_vel = vel * M2FT
+        print_accel = accel * M2FT
+        print_mass = mass * 1000         # I want my Mass in Grams
 """
-   int j;                                   /* iteration variable */
-   int thrust_index = 0;                    /* index into engine table */
-   int stage_engcnum,                       /* engcnum for current stage */
-       this_stage = 0;                      /* current stage */
-   double stage_time = 0.0,                 /* elapsed time for current stage */
-          burn_time = 0.0,                  /* Elapsed time for motor burn */
-          stage_wt,                         /* current wt of this_stage */
-          stage_diam;                       /* max diam at current time */
-   double t_rod = 0.0, v_rod  ;             /* launch rod info */
-   double c;
-   double cc, drag_bias;
-   double thrust = 0.0;                     /* Thrust */
-   double vel = 0.0;                        /* Velocity */
-   double accel = 0.0;                      /* Acceleration */
-   double alt = LAUNCHALT ;                 /* Altitude */
-   double print_vel, print_alt, print_accel, print_mass;  /* used for printing */
-
-   double mass = 0.0;
-   double t = 0.000000;
-   double max_accel = 0.0;
-   double t_max_accel = 0.0;
-   double min_accel = 0.0;
-   double t_min_accel = 0.0;
-   double max_vel = 0.0;
-   double t_max_vel = 0.0;
-   double max_alt = 0.0;                 /* kjh added to save max alt */
-   double max_t   = 0.0;                 /* kjh added to save time to max alt */
-   double drag    = 0.0;                 /* kjh added to print Drag in Nt */
-
-   double old_vel = 0.0;                 /* kjh added to avg vel in interval */
-   double avg_vel = 0.0;                 /* kjh ditto                        */
-
-   double sum_o_thrust = 0.0 ;           /* kjh added to reduce pro mass ~ thrust */
-
-   double old_thrust = 0.0;              /* last engine thrust  from table */
-   double old_time = 0.0;                /* last engine thrust time  from table */
-   double d, m1;                         /* temp vars */
-
-   int print_index = 0;                  /* used for print loop */
-   int launched = 0;                     /* indicates rocket has lifted off */
-
-   double delta_t = 0.001;               /* Time interval - 1us */
-   int ten_over_delta_t = 100 ;
-   double r ;                            /* rho == Air Density for drag calc */
-   double y;
-
-/* double air_density();                 /* kjh put this inline */
-
-   double drag_constant = 0.0 ;          /* compute once-per-stage */
-   double coast_time = 0.00;             /* kjh to coast after burnout */
-
-   double vcoff = 0.00 ;
-   double acoff = 0.00 ;
-   double tcoff = 0.00 ;   /* kjh added for cutoff data */
-
-/* double mach0_8 ;
-   double mach1_2 ;
- */
-   double dT      ;                      /* change in temp vs altitude */
-
-/* mach0_8 = mach1_0 * 0.8;
-   mach1_2 = mach1_0 * 1.2;
- */
-   r = Rho_0 ;
-
-   stage_wt = stages[this_stage].totalw;
-
-   stage_engcnum = stages[this_stage].engcnum;
-   mass = rocketwt;
-
-   /*
-   for ( j=0 ; j < stagenum ; j++ )
-      fprintf ( stream, "%cStage Weight [%d]:  %9.4f\n", ch1, j, stages[j].totalw );
-    */
-
-   /* What is the effective Diameter */
-
-   for (j = 0; j < stagenum; j++)
-   {
-      stage_diam = stages[j].maxd;
-      drag_coff  = stages[j].cd ;                  /* kjh Added This */
-
-      if (j > 0)
-      {
-         if ( stage_diam < stages[j-1].maxd)
-            stage_diam = stages[j-1].maxd;
-
-         if ( drag_coff < stages[j-1].cd )         /* kjh added this too */
-            drag_coff = stages[j-1].cd ;
-      }
-   }
-
-   d = stage_diam * IN2M ;
-
-   /* c = r * M_PI * drag_coff * d * d * 0.125;   */
-
-   drag_constant = 0.5 * drag_coff * (( M_PI * d * d * 0.25 ) + fins[this_stage].area ) ;
-
-   c = r * drag_constant ;
-
-   /* kjh wants to see thrust at t=0 if there is any ... */
-
-   if ( e_info[0].thrust[0] == 0.0 )      /*    .thrust [ evens ] = Time */
-   {
-      thrust = e_info[0].thrust[1] ;      /*    .thrust [ odds ] = Thrust */
-
-      if ( thrust != 0.0 )
-         accel  = (( thrust - drag ) / mass) - G ;
-      else
-         accel = 0.0 ;
-
-      print_alt = alt * M2FT;
-      print_vel = vel * M2FT;
-      print_accel = accel * M2FT;
-      print_mass = mass * 1000;           /* I want my Mass in Grams */
-
 /*    if (verbose)
          fprintf(stream," %4.1lf %10.1lf %10.1lf %10.1lf %11.2lf %10.3lf %10.3lf %6.4f\n",
                 t, print_alt, print_vel, print_accel, print_mass, thrust, drag, r );
@@ -730,7 +715,7 @@ def calc(flight):
 
       if ( y > SPACEALT )
          r = 0 ;
-      else if ( y > MAXALT )
+      elif y > MAXALT )
       {
          /* r = 1.7187 * exp ( -1.5757e-4 * y ) ; */
          r = 1.9788 * exp ( -1.5757e-4 * y ) ;
@@ -903,9 +888,9 @@ def calc(flight):
 
 /*    if (vel < mach0_8)
         drag_bias = 1;
-      else if (vel < mach1_0)
+      elif vel < mach1_0)
         drag_bias = (1.0 + ((vel - mach0_8) / (mach1_0 - mach0_8)));
-      else if (vel < mach1_2)
+      elif vel < mach1_2)
         drag_bias = (2.0 - 0.5*((vel - mach1_0) / (mach1_2 - mach1_0)));
       else
         drag_bias = 1.5;
@@ -947,10 +932,10 @@ def calc(flight):
       if ( vel > 0 )
           launched = 1;                 /* LIFT-OFF */
 
-      else if ( !launched && ( vel < 0 ))
+      elif !launched && ( vel < 0 ))
           alt = vel = accel = 0;        /* can't fall off pad! */
 
-      else if ( launched && ( vel < 0 ))
+      elif launched && ( vel < 0 ))
       {
         coast_time += delta_t;       /* time past burnout  */
 
@@ -973,7 +958,7 @@ def calc(flight):
          max_accel = accel;
          t_max_accel = t ;
       }
-      else if ( accel < min_accel )
+      elif accel < min_accel )
       {
          min_accel = accel;
          t_min_accel = t ;
@@ -1049,43 +1034,45 @@ def calc(flight):
            ch1, baro_press, Rho_0, M2FT * sqrt ( MACH_CONST * base_temp )) ;
    fclose(stream);
 }
+"""
 
-/*************************************************************************/
-int main ( int argc, char* argv[] )
-/*************************************************************************/
-{
-   char ans[3];
-   int i;
-   int DeBug = 1 ;
-   int argp = 1 ;
 
-   char * p ;           /* v4.1 temp */
+def parse_commandline():
+    global args, parser
 
-   printf("\nRASP - Rocket Altitude Simulation Program V%s\n\n", VERSION);
+    parser = argparse.ArgumentParser(prog='raspinfo', description=f'Dump RASP engine info (v{VERSION})')
+    parser.add_argument('-d', '--debug', action='store_true', help='debug output')
+    parser.add_argument('-q', '--quiet', action='store_true', help="be quiet about it")
+    parser.add_argument('--version', action='version', version=f'v{VERSION}')
+    parser.add_argument('engfile', default=ENG_NAME, nargs='?', action='store', help='engine filename')
 
-   if ( argc > argp )
-   {
-      if ( * argv [argp] == '-' )
-      {
+    args = parser.parse_args()
+
+
+def main():
+    debug = True
+    argp = True
+
+    print("\nRASP - Rocket Altitude Simulation Program V", VERSION)
+
+    if argc > argp:
+        if ( * argv [argp] == '-' )
          if (( * ++ argv [argp] == 'q' ) || ( * argv [argp] == 'Q' ) ||
              (    * argv [argp] == 's' ) || ( * argv [argp] == 'S' ))
          {
             verbose = FALSE;
          }
-         else if (( * argv [argp] == 'd' ) || ( * argv [argp] == 'D' ))
+         elif( * argv [argp] == 'd' ) || ( * argv [argp] == 'D' ))
          {
             DeBug = TRUE;
          }
-         argp ++ ;
-      }
-   }
+         argp ++
 
-   /* v4.1 do the Home bit */
-
-   if (( p = getenv ( "RASPHOME" )) != (char *) NULL )
-      RaspHome = strdup ( p ) ;
-   else
-      RaspHome = (char *) NULL ;
+    # v4.1 do the Home bit
+    if (( p = getenv ( "RASPHOME" )) != (char *) NULL )
+        RaspHome = strdup ( p ) ;
+    else
+        RaspHome = (char *) NULL ;
 
    (void) BaseName ( RASP_FILE_LEN, PrgName, argv [0] ) ;
 
@@ -1098,171 +1085,126 @@ int main ( int argc, char* argv[] )
 
    (void) DirName ( EngHome, ename ) ;             /* set homedir        */
 
-   if ( DeBug )
-   {
-   printf ( "RASP Home = %s\n", (RaspHome == (char *) NULL ) ? "" : RaspHome) ;
-   printf ( "Eng Home  = %s\n", EngHome ) ;
-   printf ( "Prog Name = %s\n", PrgName ) ;
-   printf ( "Eng File  = %s\n", ename ) ;
-   }
+    if debug:
+        printf ( "RASP Home = %s\n", (RaspHome == (char *) NULL ) ? "" : RaspHome)
+        printf ( "Eng Home  = %s\n", EngHome )
+        printf ( "Prog Name = %s\n", PrgName )
+        printf ( "Eng File  = %s\n", ename )
 
-   /*  kjh initialized the stage info */
+    # kjh initialized the stage info
 
-   rname [ 0 ] = '\0' ;
-   oname [ 0 ] = '\0' ;
+    rname = ""
+    oname = ""
 
-   destnum = 1;
-   bname [ 0 ] = '\0' ;
-   stagenum = 1 ;
-   faren_temp = 59;
-   site_alt = LAUNCHALT / M2FT ;
-   baro_press = STD_ATM ;
-   Rod = ROD ;
-   Nose = 1;
+    destnum = 1
+    bname = ""
+    stagenum = 1
+    faren_temp = 59
+    site_alt = LAUNCHALT / M2FT
+    baro_press = STD_ATM
+    Rod = ROD
+    Nose = 1
 
-   for ( i = 0 ; i < MAXSTAGE ; i++ )
-      stages[i].engnum = 1 ;       /* # of engines in stage */
+    for stage in flight.rocket.stages:
+        stage.engnum = 1  # of engines in stage
 
-   /* this is the batch mode block ( see n.c ) */
+    # this is the batch mode block ( see n.c )
+    if ( argc > argp ):
+        while ( argc > argp )
+            BatchFlite ( argv [argp++] ) ;
 
-   if ( argc > argp )
-   {
-      while ( argc > argp )
-         BatchFlite ( argv [argp++] ) ;
+        return
+    else:
+        while True:
+            rocketwt = 0
+            nexteng = 0
+            choices()
+            calc()
 
-      exit ( 0 ) ;
-   }
-   else
-   {
-      for (;;)
-      {
-         rocketwt = 0;
-         nexteng = 0;
-         choices();
-         calc();
+        # kjh changed this
 
-         /* kjh changed this */
-
-         strcpy ( ans, "Y" ) ;     /* v4.2 no need for strncpy here */
+        strcpy ( ans, "Y" )
 
          GetStr ( "\nDo Another One", ans, 2 ) ;
 
          if (( strncmp ( ans,"y",1 ) == 0 ) || ( strncmp ( ans,"Y", 1 ) == 0 ))
-         {
-            printf ( "\n" );
-            continue;
-         }
-         else
-            exit( 0 );
-      }
-   }
-}
-/***********************************************************************/
-int GetNose ( char* Prompt, int Default)
-/***********************************************************************/
-{
-   int GotOne = 0;
-   int l ;
-   char  EntryStr [MAXSTRLEN + 1];
+            print()
+            continue
+         else:
+            exit( 0 )
 
-   char Temp [ MAXSTRLEN ] ;
 
-   Proper ( Temp, Noses [ Default ].name ) ;
+def get_nose(prompt, default):
+    got_one = False
+    temp = None
 
-   while ( ! GotOne )
-   {
-      fprintf ( stdout, "%s [%s]:  ", Prompt, Temp ) ;
-      fgets ( EntryStr, MAXSTRLEN, stdin ) ;
+    # todo: huh?
+    Proper ( Temp, Noses [ Default ].name ) ;
 
-      l = strlen ( EntryStr ) - 1 ;          /* fgets returns the \n */
+    while not got_one:
+        entry_str = imput(prompt)
+        if not entry_str:
+            return default
+            
+        got_one = find_nose(entry_str)
 
-      if ( l <= 0 )
-         return ( Default ) ;
+   return got_one:
 
-      EntryStr [l] = '\0' ;
 
-      GotOne = FindNose ( EntryStr ) ;
+def drag_diverge(nose_type, mach_1, velocity):
 
-   }
-   return ( GotOne ) ;
+    mach_number = velocity / mach_1
 
-}
-/***********************************************************************/
-double DragDiverge ( int Type, double Mach_1, double Velocity )
-/***********************************************************************/
-{
+    if mach_number <=  0.9 or mach_number <= 0.0:
+        return 1.0
 
-   double MachNumber ;
-   double Diverge ;
+    if Noses[nose_type].form == 2:  # Rounded Noses
+        if mach_number <= 1.2:
+            diverge = 1.0 + 4.88 * (mach_number - 0.9) ** 1.1
+        elif mach_number < 2.0:
+            diverge = 2.0 + 0.30 * math.exp(-5.75 * (mach_number - 1.2))
+        else:
+            diverge = 2.0
+    else:  # Sharp Noses
+        if mach_number <= 1.05:
+            diverge = mach_number - 0.9
+            diverge *= diverge
+            diverge = 1.0 + 35.5 * diverge
+        elif mach_number < 2.0:
+            diverge = 1.27 + 0.53 * math.exp(-5.2 * (mach_number - 1.05))
+        else:
+            diverge = 1.27
+          
+    return diverge
 
-   MachNumber = Velocity / Mach_1 ;
 
-   if (( MachNumber <=  0.9 ) || ( MachNumber <= 0.0 ))
-      return ( 1.0 ) ;
 
-   if ( Noses [ Type ].form == 2 )           /* Rounded Noses */
-   {
-      if ( MachNumber <= 1.2 )
-      {
-         Diverge = 1.0 + 4.88 * pow ((( double ) ( MachNumber - 0.9 )), ( double ) ( 1.1 )) ;
-      }
-      else if ( MachNumber < 2.0 )
-      {
-         Diverge = 2.0 + 0.30 * exp (( double ) ( -5.75 * ( MachNumber - 1.2 ))) ;
-      }
-      else
-      {
-         Diverge = 2.0 ;
-      }
-   }
-   else                                      /* Sharp Noses */
-   {
-      if ( MachNumber <= 1.05 )
-      {
-         Diverge = MachNumber - 0.9 ;
-         Diverge *= Diverge ;
-         Diverge = 1.0 + 35.5 * Diverge ;
-      }
-      else if ( MachNumber < 2.0 )
-      {
-         Diverge = 1.27 + 0.53 * exp (( double ) ( -5.2 * ( MachNumber - 1.05 ))) ;
-      }
-      else
-      {
-         Diverge = 1.27 ;
-      }
-   }
-   return ( Diverge );
-}
-/***********************************************************************/
-double ISAtemp ( double BaseTemp, double Alt )
-/***********************************************************************/
-{
+def isa_temp(base_temp, alt):
+    dT = 0
 
-   double dT = 0 ;
+    if alt <= 11000:
+        dT = base_temp - alt * 0.0065
+    elif alt <= 20000:
+        dT = 216.65
+    elif alt <= 32000:
+        dT = 228.65 + (alt - 32000) * 0.0010
+    elif alt <= 47000:
+        dT = 228.65 + (alt - 47000) * 0.0028
+    elif alt <= 51000:
+        dT = 270.65
+    elif alt <= 71000:
+        dT = 214.65 - (alt - 71000) * 0.0028
+    elif alt <= 84852:
+        dT = 186.95 - (alt - 84852) * 0.0020
+    else:
+        dT = 186.95
 
-   if ( Alt <= 11000 )
-      dT = BaseTemp - ( Alt * 0.0065 ) ;
-   else if ( Alt <= 20000 )
-      dT = 216.65 ;
-   else if ( Alt <= 32000 )
-      dT = 228.65 + (( Alt - 32000 ) * 0.0010 ) ;
-   else if ( Alt <= 47000 )
-      dT = 228.65 + (( Alt - 47000 ) * 0.0028 ) ;
-   else if ( Alt <= 51000 )
-      dT = 270.65 ;
-   else if ( Alt <= 71000 )
-      dT = 214.65 - (( Alt - 71000 ) * 0.0028 ) ;
-   else if ( Alt <= 84852 )
-      dT = 186.95 - (( Alt - 84852 ) * 0.0020 ) ;
-   else
-      dT = 186.95 ;
+    if dT < 0:
+        dT = 0.0
 
-   if ( dT < 0 ) dT = 0.0 ;
+    return dT
 
-   return ( dT ) ;
-
-   /*
+"""
    H [ 0] = 0         ;  T [ 0] = 288.15  ; L [ 0] = -6.5
    H [ 1] = 11000     ;  T [ 1] = 216.65  ; L [ 1] = -6.5
    H [ 2] = 11000.1   ;  T [ 2] = 216.65  ; L [ 2] = 0
@@ -1277,6 +1219,4 @@ double ISAtemp ( double BaseTemp, double Alt )
    H [11] = 71000     ;  T [11] = 214.65  ; L [11] = -2.8
    H [12] = 71000.1   ;  T [12] = 214.65  ; L [12] = -2.0
    H [13] = 84852     ;  T [13] = 186.95  ; L [13] = -2.0
-   */
-}
 """
