@@ -82,6 +82,7 @@
  */
 """
 
+import sys
 import math
 import raspinfo
 
@@ -690,10 +691,6 @@ def calc(flight):
         print_accel = accel * M2FT
         print_mass = mass * 1000         # I want my Mass in Grams
 """
-/*    if (verbose)
-         fprintf(stream," %4.1lf %10.1lf %10.1lf %10.1lf %11.2lf %10.3lf %10.3lf %6.4f\n",
-                t, print_alt, print_vel, print_accel, print_mass, thrust, drag, r );
- */
       if (verbose)
          fprintf(stream," %4.1lf %10.1lf %10.1lf %10.1lf %11.2lf %10.3lf %10.3lf\n",
                 t, print_alt, print_vel, print_accel, print_mass, thrust, drag );
@@ -773,7 +770,7 @@ def calc(flight):
               }
           }
           /*       1                                              */
-          /*  c = --- * M_PI * d ^ 2 * R * k                        */
+          /*  c = --- * PI * d ^ 2 * R * k                        */
           /*       8                                              */
           /*                                                      */
           /*        1                                             */
@@ -1044,46 +1041,29 @@ def parse_commandline():
     parser.add_argument('-d', '--debug', action='store_true', help='debug output')
     parser.add_argument('-q', '--quiet', action='store_true', help="be quiet about it")
     parser.add_argument('--version', action='version', version=f'v{VERSION}')
-    parser.add_argument('engfile', default=ENG_NAME, nargs='?', action='store', help='engine filename')
+    parser.add_argument('raspfiles', nargs='*', help="rasp batch files")
 
     args = parser.parse_args()
 
 
 def main():
-    debug = True
-    argp = True
-
     print("\nRASP - Rocket Altitude Simulation Program V", VERSION)
 
-    if argc > argp:
-        if ( * argv [argp] == '-' )
-         if (( * ++ argv [argp] == 'q' ) || ( * argv [argp] == 'Q' ) ||
-             (    * argv [argp] == 's' ) || ( * argv [argp] == 'S' ))
-         {
-            verbose = FALSE;
-         }
-         elif( * argv [argp] == 'd' ) || ( * argv [argp] == 'D' ))
-         {
-            DeBug = TRUE;
-         }
-         argp ++
-
+    parse_commandline()
+    
     # v4.1 do the Home bit
-    if (( p = getenv ( "RASPHOME" )) != (char *) NULL )
-        RaspHome = strdup ( p ) ;
+    rasp_home = os.environ["RASPHOME" if "RASPHOME" in os.environ else None
+
+    prog_name = base_name(argv[0])
+
+    if ( strcmp ( PrgName, argv [0] ) == 0 )
+        WhereIs ( RASP_FILE_LEN, PrgName, argv [0], NULL, NULL )
     else
-        RaspHome = (char *) NULL ;
+        strncpy ( PrgName, argv [0], RASP_FILE_LEN )  # fqpn in argv [0]
 
-   (void) BaseName ( RASP_FILE_LEN, PrgName, argv [0] ) ;
+    WhereIs ( RASP_FILE_LEN, ename, DFILE, RaspHome, PrgName )
 
-   if ( strcmp ( PrgName, argv [0] ) == 0 )
-      WhereIs ( RASP_FILE_LEN, PrgName, argv [0], NULL, NULL ) ;
-   else
-      strncpy ( PrgName, argv [0], RASP_FILE_LEN );/* fqpn in argv [0]   */
-
-   WhereIs ( RASP_FILE_LEN, ename, DFILE, RaspHome, PrgName ) ;
-
-   (void) DirName ( EngHome, ename ) ;             /* set homedir        */
+    DirName ( EngHome, ename )            # set homedir
 
     if debug:
         printf ( "RASP Home = %s\n", (RaspHome == (char *) NULL ) ? "" : RaspHome)
