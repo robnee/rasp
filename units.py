@@ -164,7 +164,7 @@ def unit_label(unit_type, unit):
 
 def main():
     print(unit_label("time", "secs"))
-    print(unit_label("temp", "celcius"))
+    print(unit_label("temp", "celsius"))
     print(unit_label("length", "feet"))
     print(unit_label("mass", "lbs"))
 

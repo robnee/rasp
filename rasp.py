@@ -82,8 +82,9 @@
  */
 """
 
-import sys
+import os
 import math
+import argparse
 import raspinfo
 
 VERSION = "4.1b"
