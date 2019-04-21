@@ -321,42 +321,47 @@ def dump_header(fp, flight):
             "-----------", "---------", "---------"), file=fp)
 
 
-def choices():
-    pass
+def get_str(prompt, default):
+    entry = input(f"{prompt} [{default}]  ")
+    entry = entry.strip()
+
+    if not entry:
+        return default
+
+    return entry
 
 
-"""
+def get_int(prompt, default):
+    while True:
+        entry = get_str(prompt, default)
+
+        try:
+            return int(entry)
+        except ValueError:
+            print("Bad Value")
+
+
+def choices(defaults):
+    flight = Flight()
+
+    flight.rname = get_str("Rocket Name", defaults.rname)
  
-    int i;
-    double wt;
-    double stage_delay = 0;
- 
-    /* kjh Changed it */
- 
- 
-    GetStr ( "Rocket Name", rname, RASP_BUF_LEN ) ;
- 
-    if ( strcmp ( rname, oname ) != 0 )
-    {
-       strncpy ( oname, rname, RASP_BUF_LEN );
-       bname [ 0 ] = '\0' ;
-    }
- 
-    stagenum = GetInt ( "Number of Stages", stagenum ) ;
- 
-    for (i = 0; i < stagenum; i++)
-    {
- 
-       stages[i].engcnum = getmotor ( i + 1 );
- 
-       /* kjh Changed it */
- 
-       if (stagenum > 1)
-           sprintf ( PROMPT, "Number of Engines in Stage %d", i+1 );
-       else
-           sprintf ( PROMPT,  "Number of engines" );
- 
-       stages[i].engnum = GetInt ( PROMPT, stages[i].engnum );
+    stagenum = get_int("Number of Stages", 1)
+
+    flight.rocket = rocket = Rocket()
+
+    for num in range(stagenum):
+        flight.e_info.append(raspinfo.get_motor(defaults.ename))
+
+        stage = Stage()
+        rocket.stages.append(stage)
+
+        if num > 0:
+            prompt = f"Number of engines in Stage {num + 1}:  "
+        else:
+            prompt = f"Number of engines"
+
+        stages[i].engnum = GetInt ( PROMPT, stages[i].engnum );
  
        /* kjh Added it */
  
@@ -574,9 +579,8 @@ def choices():
     wt = rocketwt;
  
     dumpheader ( wt ) ;
- }
+
  
- """
 
 
 def calc(flight):
