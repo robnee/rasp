@@ -1,4 +1,5 @@
 import os
+import sys
 import pathlib
 
 
@@ -9,7 +10,7 @@ def dir_name(filename):
     
 def base_name(filename):
     path = pathlib.Path(filename)
-    return path, path.name
+    return path.name
 
 
 def fix_path(path, filename):
@@ -83,6 +84,7 @@ def whereis(what, env=None, dad=None):
 
 
 if __name__ == '__main__':
+    print(sys.argv, dir_name(sys.argv[0]), base_name(sys.argv[0]))
     print(dir_name(r'c:\users\rnee\file.pdf'))
     print(base_name(r'c:\users\rnee\file.pdf'))
     print(whereis("0K1F.cmd", None, r"c:\dell\uw.cmd"))

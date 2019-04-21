@@ -1,4 +1,4 @@
-"""
+r"""
  * RASP89 - Rocket Altitude Simulation Program
  * Based on the simple BASIC program written by
  * Harry Stine in 1979, modified and converted
@@ -83,9 +83,13 @@
 """
 
 import os
+import sys
 import math
+
+import nc
 import argparse
 import raspinfo
+import pathproc
 
 VERSION = "4.1b"
 
@@ -124,22 +128,16 @@ GAS_CONST_AIR = 286.90124           # ( J / Kg*K )
 MACH_CONST = GAMMA * GAS_CONST_AIR
 
 CH1 = '#'
+DFILE = 'rasp.eng'
 
-#define MAXINTLEN    6
-#define MAXLONGLEN   11
-#define MAXDBLLEN    17
-#define MAXSTRLEN    256
-
-#define DFILE "rasp.eng"
-
-NOSES = [
-    ("undefined", 1),
-    ("ogive", 1),
-    ("conic", 1),
-    ("elliptic", 2),
-    ("parabolic", 2),
-    ("blunt", 2),
-]
+NOSES = {
+    "undefined": 1,
+    "ogive": 1,
+    "conic": 1,
+    "elliptic": 2,
+    "parabolic": 2,
+    "blunt": 2,
+}
 
 
 class Fins:
@@ -280,10 +278,6 @@ struct motor_entry {
 """
 
 
-def find_nose(nose):
-    return NOSES[nose]
-
-
 def dump_header(fp, flight):
     print(CH1, file=fp)
 
@@ -327,263 +321,262 @@ def dump_header(fp, flight):
             "-----------", "---------", "---------"), file=fp)
 
 
-"""
+def choices():
+    pass
 
-
-/*************************************************************************/
-void choices()
-/*************************************************************************/
-{
-   int i;
-   double wt;
-   double stage_delay = 0;
-
-   /* kjh Changed it */
-
-
-   GetStr ( "Rocket Name", rname, RASP_BUF_LEN ) ;
-
-   if ( strcmp ( rname, oname ) != 0 )
-   {
-      strncpy ( oname, rname, RASP_BUF_LEN );
-      bname [ 0 ] = '\0' ;
-   }
-
-   stagenum = GetInt ( "Number of Stages", stagenum ) ;
-
-   for (i = 0; i < stagenum; i++)
-   {
-
-      stages[i].engcnum = getmotor ( i + 1 );
-
-      /* kjh Changed it */
-
-      if (stagenum > 1)
-          sprintf ( PROMPT, "Number of Engines in Stage %d", i+1 );
-      else
-          sprintf ( PROMPT,  "Number of engines" );
-
-      stages[i].engnum = GetInt ( PROMPT, stages[i].engnum );
-
-      /* kjh Added it */
-
-      if ( i == 0 )
-         Nose = GetNose ( "Nose ( <O>give,<C>onic,<E>lliptic,<P>arabolic,<B>lunt )", Nose );
-
-      /* kjh Changed it */
-
-      if (stagenum > 1)
-         sprintf ( PROMPT, "Weight of Stage %d w/o Engine in Ounces", i+1 ) ;
-      else
-         sprintf ( PROMPT, "Weight of Rocket w/o Engine in Ounces" ) ;
-
-      o_wt[i] = GetDbl ( PROMPT, o_wt[i] );
-
-      stages[i].weight = o_wt[i] * OZ2KG;
-
-      /* kjh Changed it */
-
-      if (stagenum > 1)
-          sprintf ( PROMPT, "Maximum Diameter of Stage %d in Inches", i + 1 );
-      else
-          sprintf ( PROMPT, "Maximum Body Diameter in Inches" ) ;
-
-      stages[i].maxd = GetDbl ( PROMPT, stages[i].maxd );
-
-      /* kjh Added it */
-
-      if (stagenum > 1)
-          sprintf ( PROMPT, "Number of Fins on Stage %d", i + 1 );
-      else
-          sprintf ( PROMPT, "Number of Fins" ) ;
-
-      fins[i].num = GetInt ( PROMPT, fins[i].num );
-
-      /* kjh Added it */
-
-      if ( fins[i].num == 0 )
-      {
-         fins[i].thickness = 0.0;
-         fins[i].span = 0.0 ;
-      }
-      else
-      {
-         if (stagenum > 1)
-             sprintf ( PROMPT, "Max Thickness of Fins on Stage %d (Inches) ", i + 1 );
-         else
-             sprintf ( PROMPT, "Max Thickness of Fins (Inches) " ) ;
-
-         fins[i].thickness = GetDbl ( PROMPT, fins[i].thickness );
-
-         /* kjh Added it */
-
-         if (stagenum > 1)
-         {
-             sprintf ( PROMPT,
-                       "Max Span of Fins on Stage %d (Inches -- From BT, Out) ",
-                       i + 1 );
-         }
-         else
-         {
-             sprintf ( PROMPT, "Max Span of Fins (Inches -- From BT, Out) " ) ;
-         }
-
-         fins[i].span = GetDbl ( PROMPT, fins[i].span );
-      }
-
-      fins[i].area = fins[i].num * fins[i].thickness * fins[i].span
-                                 * IN2M              * IN2M;
-
-      /* kjh Added it */
-
-      if (stagenum > 1)
-      {
-          sprintf ( PROMPT,
-                    "Drag Coefficient of Rocket From Stage %d, Up ", i + 1 );
-      }
-      else
-      {
-          sprintf ( PROMPT, "Drag Coefficient " ) ;
-      }
-
-      stages[i].cd = GetDbl ( PROMPT, stages[i].cd );
-
-      if (i + 1 < stagenum)
-      {
-
-          /* kjh Changed it */
-
-         sprintf ( PROMPT, "Staging Delay for Stage %d in Seconds", i + 2 ) ;
-         stage_delay = GetDbl ( PROMPT, stage_delay ) ;
-      }
-
-      /* figure start and stop times for motor burn  and stage */
-
-      if (i == 0)
-         stages[i].start_burn = 0;
-      else
-         stages[i].start_burn = stages[i-1].end_stage;
-
-      stages[i].end_burn = stages[i].start_burn + e_info[stages[i].engcnum].t2;
-      stages[i].end_stage = stages[i].end_burn + stage_delay;
-
-      /* figure weight for stage and total rocket */
-
-      stages[i].totalw = stages[i].weight +
-                         (e_info[stages[i].engcnum].wt * stages[i].engnum);
-
-      rocketwt += stages[i].totalw;
-
-   }
-
-   /* Environmental Data */
-
-   /* kjh added it */
-
-   site_alt *= M2FT ;
-
-   site_alt = GetDbl ("Launch Site Altitude in Feet", site_alt );
-
-   site_alt /= M2FT ;
-
-   /* kjh Changed it */
-
-   faren_temp = GetDbl ("Air Temp in DegF", faren_temp );
-
-   base_temp = (faren_temp - 32) * 5/9 + 273.15;  /* convert to degK */
-
-   mach1_0 = sqrt ( MACH_CONST * base_temp ) ;
-
-   /* kjh added it */
-
-   baro_press = 1 - ( 0.00000688 * site_alt * M2FT ) ;
-   baro_press =  STD_ATM * exp ( 5.256 * log ( baro_press )) ;
-
-   baro_press  = GetDbl ("Barometric Pressure at Launch Site", baro_press );
-
-   Rho_0 = ( baro_press * IN2PASCAL ) / ( GAS_CONST_AIR * base_temp ) ;
-
-   /* kjh added it */
-
-   Rod = Rod / IN2M ;
-   Rod = GetDbl ("Launch Rod Length ( inch )", Rod ) ;
-   Rod = Rod * IN2M ;
-
-   /* kjh Changed it */
-
-   coast_base = GetDbl ( "Coast Time (Enter 0.00 for Apogee)", coast_base );
-
-   /* destnum = 1;        kjh changed this */
-
-   do
-   {
-
-      /* kjh changed it */
-
-      destnum = GetInt ( "Send Data to:\n\t(1) Screen\n\t(2) Printer\n\t(3) Disk file\nEnter #", destnum );
-
-#ifdef MSDOS
-
-      if ( destnum == 1 )
-         strncpy ( fname, "CON", RASP_FILE_LEN );
-      elif destnum == 2 )
-         strncpy ( fname, "PRN", RASP_FILE_LEN );
-
-#endif
-
-#ifdef UNIX
-
-      if ( destnum == 1 )
-         strncpy ( fname, "/dev/tty", RASP_FILE_LEN ) ;
-      elif destnum == 2 )
-         strncpy ( fname, "/dev/lp", RASP_FILE_LEN );
-
-#endif
-
-#ifdef VMS
-
-      if ( destnum == 1 )
-         strncpy ( fname, "TT:", RASP_FILE_LEN );
-      elif destnum == 2 )
-         strncpy ( fname, "LP:", RASP_FILE_LEN );
-
-#endif
-
-      else
-      {
-         /* kjh added this */
-
-         for ( i = 0 ; i < strlen ( Mcode ) ; i++ )
-             if ( isupper ( Mcode[i] ))
-                Mcode[i] = tolower ( Mcode[i] );
-
-          if ( strlen ( bname ) == 0 )
-            GetStr ( "Enter File Base Name", bname, RASP_BUF_LEN ) ;
-
-          /* v4.2 user input here -- candidate for buffer overflow ... */
-
-#ifdef HAS_SNPRINTF
-          snprintf ( fname, RASP_FILE_LEN, "%s.%s", bname, Mcode ) ;
-#else
-          sprintf ( fname, "%s.%s", bname, Mcode ) ;
-#endif
-
-          /* kjh changed this */
-
-          GetStr ( "Enter File Name", fname ,RASP_BUF_LEN ) ;
-      }
-
-      if ((stream = fopen(fname,"w")) == NULL)
-         fprintf ( stderr, "%s cannot be opened.\n",fname);
-
-   } while (stream == NULL);
-
-   wt = rocketwt;
-
-   dumpheader ( wt ) ;
-}
 
 """
+ 
+    int i;
+    double wt;
+    double stage_delay = 0;
+ 
+    /* kjh Changed it */
+ 
+ 
+    GetStr ( "Rocket Name", rname, RASP_BUF_LEN ) ;
+ 
+    if ( strcmp ( rname, oname ) != 0 )
+    {
+       strncpy ( oname, rname, RASP_BUF_LEN );
+       bname [ 0 ] = '\0' ;
+    }
+ 
+    stagenum = GetInt ( "Number of Stages", stagenum ) ;
+ 
+    for (i = 0; i < stagenum; i++)
+    {
+ 
+       stages[i].engcnum = getmotor ( i + 1 );
+ 
+       /* kjh Changed it */
+ 
+       if (stagenum > 1)
+           sprintf ( PROMPT, "Number of Engines in Stage %d", i+1 );
+       else
+           sprintf ( PROMPT,  "Number of engines" );
+ 
+       stages[i].engnum = GetInt ( PROMPT, stages[i].engnum );
+ 
+       /* kjh Added it */
+ 
+       if ( i == 0 )
+          Nose = GetNose ( "Nose ( <O>give,<C>onic,<E>lliptic,<P>arabolic,<B>lunt )", Nose );
+ 
+       /* kjh Changed it */
+ 
+       if (stagenum > 1)
+          sprintf ( PROMPT, "Weight of Stage %d w/o Engine in Ounces", i+1 ) ;
+       else
+          sprintf ( PROMPT, "Weight of Rocket w/o Engine in Ounces" ) ;
+ 
+       o_wt[i] = GetDbl ( PROMPT, o_wt[i] );
+ 
+       stages[i].weight = o_wt[i] * OZ2KG;
+ 
+       /* kjh Changed it */
+ 
+       if (stagenum > 1)
+           sprintf ( PROMPT, "Maximum Diameter of Stage %d in Inches", i + 1 );
+       else
+           sprintf ( PROMPT, "Maximum Body Diameter in Inches" ) ;
+ 
+       stages[i].maxd = GetDbl ( PROMPT, stages[i].maxd );
+ 
+       /* kjh Added it */
+ 
+       if (stagenum > 1)
+           sprintf ( PROMPT, "Number of Fins on Stage %d", i + 1 );
+       else
+           sprintf ( PROMPT, "Number of Fins" ) ;
+ 
+       fins[i].num = GetInt ( PROMPT, fins[i].num );
+ 
+       /* kjh Added it */
+ 
+       if ( fins[i].num == 0 )
+       {
+          fins[i].thickness = 0.0;
+          fins[i].span = 0.0 ;
+       }
+       else
+       {
+          if (stagenum > 1)
+              sprintf ( PROMPT, "Max Thickness of Fins on Stage %d (Inches) ", i + 1 );
+          else
+              sprintf ( PROMPT, "Max Thickness of Fins (Inches) " ) ;
+ 
+          fins[i].thickness = GetDbl ( PROMPT, fins[i].thickness );
+ 
+          /* kjh Added it */
+ 
+          if (stagenum > 1)
+          {
+              sprintf ( PROMPT,
+                        "Max Span of Fins on Stage %d (Inches -- From BT, Out) ",
+                        i + 1 );
+          }
+          else
+          {
+              sprintf ( PROMPT, "Max Span of Fins (Inches -- From BT, Out) " ) ;
+          }
+ 
+          fins[i].span = GetDbl ( PROMPT, fins[i].span );
+       }
+ 
+       fins[i].area = fins[i].num * fins[i].thickness * fins[i].span
+                                  * IN2M              * IN2M;
+ 
+       /* kjh Added it */
+ 
+       if (stagenum > 1)
+       {
+           sprintf ( PROMPT,
+                     "Drag Coefficient of Rocket From Stage %d, Up ", i + 1 );
+       }
+       else
+       {
+           sprintf ( PROMPT, "Drag Coefficient " ) ;
+       }
+ 
+       stages[i].cd = GetDbl ( PROMPT, stages[i].cd );
+ 
+       if (i + 1 < stagenum)
+       {
+ 
+           /* kjh Changed it */
+ 
+          sprintf ( PROMPT, "Staging Delay for Stage %d in Seconds", i + 2 ) ;
+          stage_delay = GetDbl ( PROMPT, stage_delay ) ;
+       }
+ 
+       /* figure start and stop times for motor burn  and stage */
+ 
+       if (i == 0)
+          stages[i].start_burn = 0;
+       else
+          stages[i].start_burn = stages[i-1].end_stage;
+ 
+       stages[i].end_burn = stages[i].start_burn + e_info[stages[i].engcnum].t2;
+       stages[i].end_stage = stages[i].end_burn + stage_delay;
+ 
+       /* figure weight for stage and total rocket */
+ 
+       stages[i].totalw = stages[i].weight +
+                          (e_info[stages[i].engcnum].wt * stages[i].engnum);
+ 
+       rocketwt += stages[i].totalw;
+ 
+    }
+ 
+    /* Environmental Data */
+ 
+    /* kjh added it */
+ 
+    site_alt *= M2FT ;
+ 
+    site_alt = GetDbl ("Launch Site Altitude in Feet", site_alt );
+ 
+    site_alt /= M2FT ;
+ 
+    /* kjh Changed it */
+ 
+    faren_temp = GetDbl ("Air Temp in DegF", faren_temp );
+ 
+    base_temp = (faren_temp - 32) * 5/9 + 273.15;  /* convert to degK */
+ 
+    mach1_0 = sqrt ( MACH_CONST * base_temp ) ;
+ 
+    /* kjh added it */
+ 
+    baro_press = 1 - ( 0.00000688 * site_alt * M2FT ) ;
+    baro_press =  STD_ATM * exp ( 5.256 * log ( baro_press )) ;
+ 
+    baro_press  = GetDbl ("Barometric Pressure at Launch Site", baro_press );
+ 
+    Rho_0 = ( baro_press * IN2PASCAL ) / ( GAS_CONST_AIR * base_temp ) ;
+ 
+    /* kjh added it */
+ 
+    Rod = Rod / IN2M ;
+    Rod = GetDbl ("Launch Rod Length ( inch )", Rod ) ;
+    Rod = Rod * IN2M ;
+ 
+    /* kjh Changed it */
+ 
+    coast_base = GetDbl ( "Coast Time (Enter 0.00 for Apogee)", coast_base );
+ 
+    /* destnum = 1;        kjh changed this */
+ 
+    do
+    {
+ 
+       /* kjh changed it */
+ 
+       destnum = GetInt ( "Send Data to:\n\t(1) Screen\n\t(2) Printer\n\t(3) Disk file\nEnter #", destnum );
+ 
+ #ifdef MSDOS
+ 
+       if ( destnum == 1 )
+          strncpy ( fname, "CON", RASP_FILE_LEN );
+       elif destnum == 2 )
+          strncpy ( fname, "PRN", RASP_FILE_LEN );
+ 
+ #endif
+ 
+ #ifdef UNIX
+ 
+       if ( destnum == 1 )
+          strncpy ( fname, "/dev/tty", RASP_FILE_LEN ) ;
+       elif destnum == 2 )
+          strncpy ( fname, "/dev/lp", RASP_FILE_LEN );
+ 
+ #endif
+ 
+ #ifdef VMS
+ 
+       if ( destnum == 1 )
+          strncpy ( fname, "TT:", RASP_FILE_LEN );
+       elif destnum == 2 )
+          strncpy ( fname, "LP:", RASP_FILE_LEN );
+ 
+ #endif
+ 
+       else
+       {
+          /* kjh added this */
+ 
+          for ( i = 0 ; i < strlen ( Mcode ) ; i++ )
+              if ( isupper ( Mcode[i] ))
+                 Mcode[i] = tolower ( Mcode[i] );
+ 
+           if ( strlen ( bname ) == 0 )
+             GetStr ( "Enter File Base Name", bname, RASP_BUF_LEN ) ;
+ 
+           /* v4.2 user input here -- candidate for buffer overflow ... */
+ 
+ #ifdef HAS_SNPRINTF
+           snprintf ( fname, RASP_FILE_LEN, "%s.%s", bname, Mcode ) ;
+ #else
+           sprintf ( fname, "%s.%s", bname, Mcode ) ;
+ #endif
+ 
+           /* kjh changed this */
+ 
+           GetStr ( "Enter File Name", fname ,RASP_BUF_LEN ) ;
+       }
+ 
+       if ((stream = fopen(fname,"w")) == NULL)
+          fprintf ( stderr, "%s cannot be opened.\n",fname);
+ 
+    } while (stream == NULL);
+ 
+    wt = rocketwt;
+ 
+    dumpheader ( wt ) ;
+ }
+ 
+ """
 
 
 def calc(flight):
@@ -1053,93 +1046,84 @@ def main():
     parse_commandline()
     
     # v4.1 do the Home bit
-    rasp_home = os.environ["RASPHOME" if "RASPHOME" in os.environ else None
+    rasp_home = os.environ["RASPHOME"] if "RASPHOME" in os.environ else None
 
-    prog_name = base_name(argv[0])
+    # is the full path available?
+    prog_name = pathproc.base_name(sys.argv[0])
+    if prog_name == sys.argv[0]:
+        # search for __main__
+        prog_name = pathproc.whereis(sys.argv[0])
+    else:
+        prog_name = sys.argv[0]  # fqpn in sys.argv[0]
 
-    if ( strcmp ( PrgName, argv [0] ) == 0 )
-        WhereIs ( RASP_FILE_LEN, PrgName, argv [0], NULL, NULL )
-    else
-        strncpy ( PrgName, argv [0], RASP_FILE_LEN )  # fqpn in argv [0]
+    ename = pathproc.whereis(DFILE, rasp_home, prog_name)
+    eng_home = pathproc.dir_name(ename)
 
-    WhereIs ( RASP_FILE_LEN, ename, DFILE, RaspHome, PrgName )
+    if args.debug:
+        print("RASP Home = ", rasp_home)
+        print("Eng Home  = ", eng_home)
+        print("Prog Name = ", prog_name)
+        print("Eng File  = ", ename)
 
-    DirName ( EngHome, ename )            # set homedir
+    flight = Flight()
 
-    if debug:
-        printf ( "RASP Home = %s\n", (RaspHome == (char *) NULL ) ? "" : RaspHome)
-        printf ( "Eng Home  = %s\n", EngHome )
-        printf ( "Prog Name = %s\n", PrgName )
-        printf ( "Eng File  = %s\n", ename )
-
-    # kjh initialized the stage info
-
-    rname = ""
-    oname = ""
-
-    destnum = 1
-    bname = ""
-    stagenum = 1
-    faren_temp = 59
-    site_alt = LAUNCHALT / M2FT
-    baro_press = STD_ATM
-    Rod = ROD
-    Nose = 1
+    flight.faren_temp = 59
+    flight.site_alt = LAUNCHALT / M2FT
+    flight.baro_press = STD_ATM
+    flight.rod = ROD
 
     for stage in flight.rocket.stages:
         stage.engnum = 1  # of engines in stage
 
     # this is the batch mode block ( see n.c )
-    if ( argc > argp ):
-        while ( argc > argp )
-            BatchFlite ( argv [argp++] ) ;
-
-        return
+    if args.raspfiles:
+        for rasp in args.raspfiles:
+            nc.batch_flite(rasp)
     else:
         while True:
-            rocketwt = 0
-            nexteng = 0
+            flight.rocketwt = 0
+            flight.nexteng = 0
+
             choices()
-            calc()
 
-        # kjh changed this
+            calc(flight)
 
-        strcpy ( ans, "Y" )
+            ans = input("\nDo Another One? ")
+            if ans == "y" or ans == "Y":
+                print()
+            else:
+                break
 
-         GetStr ( "\nDo Another One", ans, 2 ) ;
 
-         if (( strncmp ( ans,"y",1 ) == 0 ) || ( strncmp ( ans,"Y", 1 ) == 0 ))
-            print()
-            continue
-         else:
-            exit( 0 )
+def find_nose(nose):
+    for name, shape in NOSES:
+        if name.startswith(nose.lower()):
+            return name
+
+    return None
 
 
 def get_nose(prompt, default):
-    got_one = False
-    temp = None
-
-    # todo: huh?
-    Proper ( Temp, Noses [ Default ].name ) ;
+    got_one = None
 
     while not got_one:
-        entry_str = imput(prompt)
+        entry_str = input(f"{prompt} [{default.capitalize()}]:  ")
         if not entry_str:
             return default
             
         got_one = find_nose(entry_str)
 
-   return got_one:
+    return got_one
 
 
 def drag_diverge(nose_type, mach_1, velocity):
 
     mach_number = velocity / mach_1
 
-    if mach_number <=  0.9 or mach_number <= 0.0:
+    if mach_number <= 0.9 or mach_number <= 0.0:
         return 1.0
 
-    if Noses[nose_type].form == 2:  # Rounded Noses
+    if NOSES[nose_type] == 2:  # Rounded Noses
         if mach_number <= 1.2:
             diverge = 1.0 + 4.88 * (mach_number - 0.9) ** 1.1
         elif mach_number < 2.0:
@@ -1159,45 +1143,25 @@ def drag_diverge(nose_type, mach_1, velocity):
     return diverge
 
 
-
 def isa_temp(base_temp, alt):
-    dT = 0
-
     if alt <= 11000:
-        dT = base_temp - alt * 0.0065
+        dt = base_temp - alt * 0.0065
     elif alt <= 20000:
-        dT = 216.65
+        dt = 216.65
     elif alt <= 32000:
-        dT = 228.65 + (alt - 32000) * 0.0010
+        dt = 228.65 + (alt - 32000) * 0.0010
     elif alt <= 47000:
-        dT = 228.65 + (alt - 47000) * 0.0028
+        dt = 228.65 + (alt - 47000) * 0.0028
     elif alt <= 51000:
-        dT = 270.65
+        dt = 270.65
     elif alt <= 71000:
-        dT = 214.65 - (alt - 71000) * 0.0028
+        dt = 214.65 - (alt - 71000) * 0.0028
     elif alt <= 84852:
-        dT = 186.95 - (alt - 84852) * 0.0020
+        dt = 186.95 - (alt - 84852) * 0.0020
     else:
-        dT = 186.95
+        dt = 186.95
 
-    if dT < 0:
-        dT = 0.0
+    if dt < 0:
+        dt = 0.0
 
-    return dT
-
-"""
-   H [ 0] = 0         ;  T [ 0] = 288.15  ; L [ 0] = -6.5
-   H [ 1] = 11000     ;  T [ 1] = 216.65  ; L [ 1] = -6.5
-   H [ 2] = 11000.1   ;  T [ 2] = 216.65  ; L [ 2] = 0
-   H [ 3] = 20000     ;  T [ 3] = 216.65  ; L [ 3] = 0
-   H [ 4] = 20000.1   ;  T [ 4] = 216.65  ; L [ 4] = 1.0
-   H [ 5] = 32000     ;  T [ 5] = 228.65  ; L [ 5] = 1.0
-   H [ 6] = 32000.1   ;  T [ 6] = 228.65  ; L [ 6] = 2.8
-   H [ 7] = 47000     ;  T [ 7] = 270.65  ; L [ 7] = 2.8
-   H [ 8] = 47000.1   ;  T [ 8] = 270.75  ; L [ 8] = 0.0
-   H [ 9] = 51000     ;  T [ 9] = 270.65  ; L [ 9] = 0.0
-   H [10] = 51000.1   ;  T [10] = 270.65  ; L [10] = -2.8
-   H [11] = 71000     ;  T [11] = 214.65  ; L [11] = -2.8
-   H [12] = 71000.1   ;  T [12] = 214.65  ; L [12] = -2.0
-   H [13] = 84852     ;  T [13] = 186.95  ; L [13] = -2.0
-"""
+    return dt

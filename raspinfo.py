@@ -4,7 +4,6 @@ parse and display eng (engine) files
 
 import sys
 import math
-import json
 import argparse
 from collections import namedtuple
 
