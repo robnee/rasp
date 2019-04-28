@@ -341,6 +341,16 @@ def get_int(prompt, default):
             print("Bad Value")
 
 
+def get_float(prompt, default):
+    while True:
+        entry = get_str(prompt, default)
+
+        try:
+            return float(entry)
+        except ValueError:
+            print("Bad Value")
+
+
 def choices(defaults):
     flight = Flight()
 
@@ -356,231 +366,126 @@ def choices(defaults):
         stage = Stage()
         rocket.stages.append(stage)
 
-        if num > 0:
-            prompt = f"Number of engines in Stage {num + 1}:  "
+        prompt = f"Number of engines" + f" in Stage {num + 1}" if num > 0 else ""
+
+        stage.engnum = get_int(prompt + prompt, defaults.stages[0].engnum)
+ 
+        if num == 0:
+            rocket.nose = get_nose("Nose (<O>give,<C>onic,<E>lliptic,<P>arabolic,<B>lunt)",
+                                   defaults.rocket.nose)
+        if stagenum > 1:
+            prompt = f"Weight of Stage {num + 1} w/o Engine in Ounces"
         else:
-            prompt = f"Number of engines"
+            prompt = f"Weight of Rocket w/o Engine in Ounces"
 
-        stages[i].engnum = GetInt ( PROMPT, stages[i].engnum );
+        # Remember the weight from run to run
+        defaults.o_wt[num] = get_float(prompt, defaults.o_wt[num])
  
-       /* kjh Added it */
+        stage.weight = defaults.o_wt[num] * OZ2KG
  
-       if ( i == 0 )
-          Nose = GetNose ( "Nose ( <O>give,<C>onic,<E>lliptic,<P>arabolic,<B>lunt )", Nose );
+        if stagenum > 1:
+            prompt = f"Maximum Diameter of Stage {num + 1} in Inches"
+        else:
+            prompt = f"Maximum Body Diameter in Inches"
  
-       /* kjh Changed it */
+        stage.maxd = get_float(prompt, defaults.stages[0].maxd)
  
-       if (stagenum > 1)
-          sprintf ( PROMPT, "Weight of Stage %d w/o Engine in Ounces", i+1 ) ;
-       else
-          sprintf ( PROMPT, "Weight of Rocket w/o Engine in Ounces" ) ;
- 
-       o_wt[i] = GetDbl ( PROMPT, o_wt[i] );
- 
-       stages[i].weight = o_wt[i] * OZ2KG;
- 
-       /* kjh Changed it */
- 
-       if (stagenum > 1)
-           sprintf ( PROMPT, "Maximum Diameter of Stage %d in Inches", i + 1 );
-       else
-           sprintf ( PROMPT, "Maximum Body Diameter in Inches" ) ;
- 
-       stages[i].maxd = GetDbl ( PROMPT, stages[i].maxd );
- 
-       /* kjh Added it */
- 
-       if (stagenum > 1)
-           sprintf ( PROMPT, "Number of Fins on Stage %d", i + 1 );
-       else
-           sprintf ( PROMPT, "Number of Fins" ) ;
- 
-       fins[i].num = GetInt ( PROMPT, fins[i].num );
- 
-       /* kjh Added it */
- 
-       if ( fins[i].num == 0 )
-       {
-          fins[i].thickness = 0.0;
-          fins[i].span = 0.0 ;
-       }
-       else
-       {
-          if (stagenum > 1)
-              sprintf ( PROMPT, "Max Thickness of Fins on Stage %d (Inches) ", i + 1 );
-          else
-              sprintf ( PROMPT, "Max Thickness of Fins (Inches) " ) ;
- 
-          fins[i].thickness = GetDbl ( PROMPT, fins[i].thickness );
- 
-          /* kjh Added it */
- 
-          if (stagenum > 1)
-          {
-              sprintf ( PROMPT,
-                        "Max Span of Fins on Stage %d (Inches -- From BT, Out) ",
-                        i + 1 );
-          }
-          else
-          {
-              sprintf ( PROMPT, "Max Span of Fins (Inches -- From BT, Out) " ) ;
-          }
- 
-          fins[i].span = GetDbl ( PROMPT, fins[i].span );
-       }
- 
-       fins[i].area = fins[i].num * fins[i].thickness * fins[i].span
-                                  * IN2M              * IN2M;
- 
-       /* kjh Added it */
- 
-       if (stagenum > 1)
-       {
-           sprintf ( PROMPT,
-                     "Drag Coefficient of Rocket From Stage %d, Up ", i + 1 );
-       }
-       else
-       {
-           sprintf ( PROMPT, "Drag Coefficient " ) ;
-       }
- 
-       stages[i].cd = GetDbl ( PROMPT, stages[i].cd );
- 
-       if (i + 1 < stagenum)
-       {
- 
-           /* kjh Changed it */
- 
-          sprintf ( PROMPT, "Staging Delay for Stage %d in Seconds", i + 2 ) ;
-          stage_delay = GetDbl ( PROMPT, stage_delay ) ;
-       }
- 
-       /* figure start and stop times for motor burn  and stage */
- 
-       if (i == 0)
-          stages[i].start_burn = 0;
-       else
-          stages[i].start_burn = stages[i-1].end_stage;
- 
-       stages[i].end_burn = stages[i].start_burn + e_info[stages[i].engcnum].t2;
-       stages[i].end_stage = stages[i].end_burn + stage_delay;
- 
-       /* figure weight for stage and total rocket */
- 
-       stages[i].totalw = stages[i].weight +
-                          (e_info[stages[i].engcnum].wt * stages[i].engnum);
- 
-       rocketwt += stages[i].totalw;
- 
-    }
- 
-    /* Environmental Data */
- 
-    /* kjh added it */
- 
-    site_alt *= M2FT ;
- 
-    site_alt = GetDbl ("Launch Site Altitude in Feet", site_alt );
- 
-    site_alt /= M2FT ;
- 
-    /* kjh Changed it */
- 
-    faren_temp = GetDbl ("Air Temp in DegF", faren_temp );
- 
-    base_temp = (faren_temp - 32) * 5/9 + 273.15;  /* convert to degK */
- 
-    mach1_0 = sqrt ( MACH_CONST * base_temp ) ;
- 
-    /* kjh added it */
- 
-    baro_press = 1 - ( 0.00000688 * site_alt * M2FT ) ;
-    baro_press =  STD_ATM * exp ( 5.256 * log ( baro_press )) ;
- 
-    baro_press  = GetDbl ("Barometric Pressure at Launch Site", baro_press );
- 
-    Rho_0 = ( baro_press * IN2PASCAL ) / ( GAS_CONST_AIR * base_temp ) ;
- 
-    /* kjh added it */
- 
-    Rod = Rod / IN2M ;
-    Rod = GetDbl ("Launch Rod Length ( inch )", Rod ) ;
-    Rod = Rod * IN2M ;
- 
-    /* kjh Changed it */
- 
-    coast_base = GetDbl ( "Coast Time (Enter 0.00 for Apogee)", coast_base );
- 
-    /* destnum = 1;        kjh changed this */
- 
-    do
-    {
- 
-       /* kjh changed it */
- 
-       destnum = GetInt ( "Send Data to:\n\t(1) Screen\n\t(2) Printer\n\t(3) Disk file\nEnter #", destnum );
- 
- #ifdef MSDOS
- 
-       if ( destnum == 1 )
-          strncpy ( fname, "CON", RASP_FILE_LEN );
-       elif destnum == 2 )
-          strncpy ( fname, "PRN", RASP_FILE_LEN );
- 
- #endif
- 
- #ifdef UNIX
- 
-       if ( destnum == 1 )
-          strncpy ( fname, "/dev/tty", RASP_FILE_LEN ) ;
-       elif destnum == 2 )
-          strncpy ( fname, "/dev/lp", RASP_FILE_LEN );
- 
- #endif
- 
- #ifdef VMS
- 
-       if ( destnum == 1 )
-          strncpy ( fname, "TT:", RASP_FILE_LEN );
-       elif destnum == 2 )
-          strncpy ( fname, "LP:", RASP_FILE_LEN );
- 
- #endif
- 
-       else
-       {
-          /* kjh added this */
- 
-          for ( i = 0 ; i < strlen ( Mcode ) ; i++ )
-              if ( isupper ( Mcode[i] ))
-                 Mcode[i] = tolower ( Mcode[i] );
- 
-           if ( strlen ( bname ) == 0 )
-             GetStr ( "Enter File Base Name", bname, RASP_BUF_LEN ) ;
- 
-           /* v4.2 user input here -- candidate for buffer overflow ... */
- 
- #ifdef HAS_SNPRINTF
-           snprintf ( fname, RASP_FILE_LEN, "%s.%s", bname, Mcode ) ;
- #else
-           sprintf ( fname, "%s.%s", bname, Mcode ) ;
- #endif
- 
-           /* kjh changed this */
- 
-           GetStr ( "Enter File Name", fname ,RASP_BUF_LEN ) ;
-       }
- 
-       if ((stream = fopen(fname,"w")) == NULL)
-          fprintf ( stderr, "%s cannot be opened.\n",fname);
- 
-    } while (stream == NULL);
- 
-    wt = rocketwt;
- 
-    dumpheader ( wt ) ;
+        if stagenum > 1:
+            prompt = f"Number of Fins on Stage {num + 1}"
+        else:
+            prompt = f"Number of Fins"
 
+        fins = stage.fins = Fins()
+        fins.num = get_int(prompt, defaults.stages[0].fins.num)
  
+        if fins.num == 0:
+            fins.thickness = 0.0
+            fins.span = 0.0
+        else:
+            if stagenum > 1:
+                prompt = f"Max Thickness of Fins on Stage {num + 1} (Inches) "
+            else:
+                prompt = f"Max Thickness of Fins (Inches) "
+ 
+            fins.thickness = get_float(prompt, defaults.stages[0].fins.thickness)
+ 
+            if stagenum > 1:
+                prompt = f"Max Span of Fins on Stage {num + 1} (Inches -- From BT, Out) "
+            else:
+                prompt = f"Max Span of Fins (Inches -- From BT, Out) "
+
+            fins.span = get_float(prompt, defaults.stages[0].fins.span)
+
+        fins.area = fins.num * fins.thickness * fins.span * IN2M * IN2M
+
+        if stagenum > 1:
+            prompt = f"Drag Coefficient of Rocket From Stage {num + 1}, Up "
+        else:
+            prompt = f"Drag Coefficient "
+
+        stage.cd = get_float(prompt, defaults.stages[0].cd)
+ 
+        if num + 1 < stagenum:
+            prompt = f"Staging Delay for Stage {num + 2} in Seconds"
+            stage_delay = get_float(prompt, defaults.rocket.stage_delay)
+        else:
+            stage_delay = 0
+
+        # figure start and stop times for motor burn  and stage
+ 
+        if num == 0:
+            stage.start_burn = 0
+        else:
+            stage.start_burn = rocket.stages[num - 1].end_stage
+ 
+        stage.end_burn = stage.start_burn + flight.e_info[num].t2
+        stage.end_stage = stage.end_burn + stage_delay
+ 
+        # figure weight for stage and total rocket
+ 
+        stage.totalw = stage.weight + flight.e_info[num].wt * stage.engnum
+ 
+        flight.rocketwt += stage.totalw
+
+    # Environmental Data
+    flight.site_alt = get_float ("Launch Site Altitude in Feet", defaults.site_alt * M2FT) / M2FT
+ 
+    flight.faren_temp = get_float("Air Temp in DegF", defaults.faren_temp)
+ 
+    flight.base_temp = (flight.faren_temp - 32) * 5 / 9 + 273.15  # convert to degK
+ 
+    flight.mach1_0 = math.sqrt(MACH_CONST * flight.base_temp)
+ 
+    baro_press = 1 - (0.00000688 * flight.site_alt * M2FT)
+    baro_press = STD_ATM * math.exp(5.256 * math.log(baro_press))
+    flight.baro_press = get_float("Barometric Pressure at Launch Site", baro_press)
+ 
+    flight.rho_0 = (baro_press * IN2PASCAL) / (GAS_CONST_AIR * flight.base_temp)
+ 
+    flight.rod = get_float("Launch Rod Length ( inch )", defaults.rod / IN2M) * IN2M
+
+    flight.coast_base = get_float("Coast Time (Enter 0.00 for Apogee)", defaults.coast_base)
+ 
+    destnum = get_int("Send Data to:\n\t(1) Screen\n\t(2) Printer\n\t(3) Disk file\nEnter #", 1)
+
+    if destnum == 1:
+        if sys.platform == 'Win32':
+            flight.fname = "CON"
+        elif sys.platform == "Linux":
+            flight.fname = "/dev/tty"
+        elif sys.platform == 'VMS':
+            flight.fname = "TT:"
+    elif destnum == 2:
+        if sys.platform == 'Win32':
+            flight.fname = "PRN"
+        elif sys.platform == "Linux":
+            flight.fname = "/dev/lp"
+        elif sys.platform == 'VMS':
+            flight.fname = "LP:"
+    else:
+        bname = get_str("Enter File Base Name", None)
+        fname = '.'.join([bname, flight.e_info[0].code])
+        flight.fname = get_str("Enter File Name", fname)
 
 
 def calc(flight):
@@ -629,7 +534,7 @@ def calc(flight):
 
     delta_t = 0.001                   # Time interval - 1us
     ten_over_delta_t = 100
-    r = Rho_0                         # rho == Air Density for drag calc
+    r = flight.rho_0                         # rho == Air Density for drag calc
 
 # double air_density()                # kjh put this inline
 
@@ -642,11 +547,9 @@ def calc(flight):
 
     dT = 0                            # change in temp vs altitude
 
-    stage_wt = stages[this_stage].totalw
+    stage_wt = flight.rocket.stages[this_stage].totalw
 
-    stage_engcnum = stages[this_stage].engcnum
-    mass = rocketwt
-
+    mass = flight.rocketwt
    
 #  for ( j=0 ; j < stagenum ; j++ )
 #     fprintf ( stream, "%cStage Weight [%d]:  %9.4f\n", ch1, j, stages[j].totalw );
@@ -670,14 +573,14 @@ def calc(flight):
 
     # c = r * M_PI * drag_coff * d * d * 0.125;
 
-    drag_constant = 0.5 * drag_coff * ((M_PI * d * d * 0.25) + fins[this_stage].area)
+    drag_constant = 0.5 * drag_coff * ((M_PI * d * d * 0.25) + flight.rocket.fins[this_stage].area)
 
     c = r * drag_constant
 
     # kjh wants to see thrust at t=0 if there is any ...
 
-    if e_info[0].thrust[0] == 0.0:       # .thrust [ evens ] = Time
-        thrust = e_info[0].thrust[1]     # .thrust [ odds ] = Thrust
+    if flight.e_info[0].thrust[0] == 0.0:       # .thrust [ evens ] = Time
+        thrust = flight.e_info[0].thrust[1]     # .thrust [ odds ] = Thrust
 
         if thrust != 0.0:
             accel  = (( thrust - drag ) / mass) - G
@@ -1090,7 +993,9 @@ def main():
 
             choices()
 
-            calc(flight)
+            with open(flight.fname) as fp:
+                dump_header(fp, flight)
+                calc(flight)
 
             ans = input("\nDo Another One? ")
             if ans == "y" or ans == "Y":
