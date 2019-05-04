@@ -1,85 +1,84 @@
 r"""
- * RASP89 - Rocket Altitude Simulation Program
- * Based on the simple BASIC program written by
- * Harry Stine in 1979, modified and converted
- * into C by Mark A. Storin, Sept/Oct 1989.
- * Rev 2 by Kent Hoult, June 1990.
- * Definitions moved to rasp.h by kjh June, 1995
- *
- * 10-20-89 modified to allow multiple stages up to 3.
- * 07-01-90 modified to use linear segment engine thrust tables from data file
- *          smaller time increments, and crude supersonic transition drag.
- * 6/7/93   Modified to support staging delays.
- *          Made changes to the supersonic transition drag equations.
- *          Migrated lots of global variables to local (with meaninful names)
- *          Rev #3  Stu Barrett
- * 12/29/93 Added support for VAX/VMS - Rusty Whitman
- * 02/15/94 Decrease air density with altitude/temp - added air_density()
- *          Make output gnuplot compatible
- *          Rev 3.2  - Mark C. Spiegl (spiegl@rtsg.mot.com)
- * 06-15-95 Changed Data Entry Routines to default to previous values
- *          Added entry from batch file ( see vul.ovi )
- *          Added Usr Defined Coast Time Past Apogee
- *          Added Barometric Pressure --> Rho0 = f ( T, P ) Calc
- *          Added Launch Pad Elevation
- *          Added Fin Number, Thickness & Span to compute Effective
- *             Cross Sectional Area
- *          Added cd to stage structure
- *          Changed air_density() data table, added interpolation between
- *             table entries and now pass launch pad elevation.
- *          Consume propellant mass as a fraction of Impulse / Total Impulse
- *          Added M,C&B Drag Divergence Calc.
- *
- *             Sharp Noses:
- *                   /
- *                  |                                 2
- *                  | Cd0 * ( 1.0 + 35.5 * ( M - 0.9 ) )   ( 0.9 <= M <= 1.05 )
- *             Cd = |
- *                  |        /               -5.2 * ( M - 1.05 )\
- *                  | Cd0 * |( 1.27 + 0.53 * e                   | ( M > 1.05 )
- *                  |        \                                  /
- *                   \
- *
- *             Round Noses:
- *                   /
- *                  |                                 1.1
- *                  | Cd0 * ( 1.0 + 4.88 * ( M - 0.9 ) )   ( 0.9 <= M <= 1.2 )
- *             Cd = |
- *                  |        /              -5.75 * ( M - 1.2 ) \
- *                  | Cd0 * |( 2.0 + 0.30 * e                    | ( M > 1.2 )
- *                  |        \                                  /
- *                   \
- *
- *          Added Nose Type ( O,C,E,P,B,X ) to Input For The Above
- *          Changed Drag Output to display Drag in Newtons
- *          Changed displayed Mass to Grams
- *          Cleaned up output
- *          Fixed divide by zero error for boosted dart
- *          Made rasp.h, n.h. units.h and parse.h
- *          Rev 4.0  - Konrad J. Hambrick (konrad@netcom.com, konrad@ys.com)
- *
- * 08-30-98 Added Processing for RASPHOME env varb.  RASPHOME can include
- *          multiple paths delimited by the separator in the traditional
- *          PATH env varb.  ( i.e. unix == ':' ; DOS == ';' ; VMS == ????? )
- *          RASP looks for rasp.eng in:   1. Paths in RASPHOME
- *                                        2. In RASP's executable path
- *                                        3. In the paths of PATH itself.
- *          ( somebody please fix VMS ;-)
- *          ( added module pathproc.c and pathproc.h )
- *          Rev 4.1 -- Konrad J. Hambrick (konrad@netcom.com, konrad@ys.com)
- *
- * 10-21-98 Fixed redundant fclose() in n.c::ToDaMoonAlice()
- *          Thanks to Jeff Taylor
- *          Rev 4.1b -- Konrad J. Hambrick (konrad@netcom.com, konrad@ys.com)
- *
- * 04-22-00 Cleaned up possible buffer overflow candidates ( strcpy / sprintf )
- *          Fixed bug in PathProc () -- changed return type to int ( instead
- *          of char * ).  From time-to-time, gdb showed the target buffer was
- *          initialized to a NULL pointer :-(
- *          Changed functions in pathproc.c to require a target buffer length
- *          in order to eliminate buffer overflows.
- *          Rev 4.2 -- Konrad J. Hambrick (konrad@netcom.com konrad@kjh-com.com)
- */
+RASP89 - Rocket Altitude Simulation Program
+Based on the simple BASIC program written by
+Harry Stine in 1979, modified and converted
+into C by Mark A. Storin, Sept/Oct 1989.
+Rev 2 by Kent Hoult, June 1990.
+Definitions moved to rasp.h by kjh June, 1995
+
+10-20-89 modified to allow multiple stages up to 3.
+07-01-90 modified to use linear segment engine thrust tables from data file
+         smaller time increments, and crude supersonic transition drag.
+6/7/93   Modified to support staging delays.
+         Made changes to the supersonic transition drag equations.
+         Migrated lots of global variables to local (with meaninful names)
+         Rev #3  Stu Barrett
+12/29/93 Added support for VAX/VMS - Rusty Whitman
+02/15/94 Decrease air density with altitude/temp - added air_density()
+         Make output gnuplot compatible
+         Rev 3.2  - Mark C. Spiegl (spiegl@rtsg.mot.com)
+06-15-95 Changed Data Entry Routines to default to previous values
+         Added entry from batch file ( see vul.ovi )
+         Added Usr Defined Coast Time Past Apogee
+         Added Barometric Pressure --> Rho0 = f ( T, P ) Calc
+         Added Launch Pad Elevation
+         Added Fin Number, Thickness & Span to compute Effective
+            Cross Sectional Area
+         Added cd to stage structure
+         Changed air_density() data table, added interpolation between
+            table entries and now pass launch pad elevation.
+         Consume propellant mass as a fraction of Impulse / Total Impulse
+         Added M,C&B Drag Divergence Calc.
+
+            Sharp Noses:
+                  /
+                 |                                 2
+                 | Cd0 * ( 1.0 + 35.5 * ( M - 0.9 ) )   ( 0.9 <= M <= 1.05 )
+            Cd = |
+                 |        /               -5.2 * ( M - 1.05 )\
+                 | Cd0 * |( 1.27 + 0.53 * e                   | ( M > 1.05 )
+                 |        \                                  /
+                  \
+
+            Round Noses:
+                  /
+                 |                                 1.1
+                 | Cd0 * ( 1.0 + 4.88 * ( M - 0.9 ) )   ( 0.9 <= M <= 1.2 )
+            Cd = |
+                 |        /              -5.75 * ( M - 1.2 ) \
+                 | Cd0 * |( 2.0 + 0.30 * e                    | ( M > 1.2 )
+                 |        \                                  /
+                  \
+
+         Added Nose Type ( O,C,E,P,B,X ) to Input For The Above
+         Changed Drag Output to display Drag in Newtons
+         Changed displayed Mass to Grams
+         Cleaned up output
+         Fixed divide by zero error for boosted dart
+         Made rasp.h, n.h. units.h and parse.h
+         Rev 4.0  - Konrad J. Hambrick (konrad@netcom.com, konrad@ys.com)
+
+08-30-98 Added Processing for RASPHOME env varb.  RASPHOME can include
+         multiple paths delimited by the separator in the traditional
+         PATH env varb.  ( i.e. unix == ':' ; DOS == ';' ; VMS == ????? )
+         RASP looks for rasp.eng in:   1. Paths in RASPHOME
+                                       2. In RASP's executable path
+                                       3. In the paths of PATH itself.
+         ( somebody please fix VMS ;-)
+         ( added module pathproc.c and pathproc.h )
+         Rev 4.1 -- Konrad J. Hambrick (konrad@netcom.com, konrad@ys.com)
+
+10-21-98 Fixed redundant fclose() in n.c::ToDaMoonAlice()
+         Thanks to Jeff Taylor
+         Rev 4.1b -- Konrad J. Hambrick (konrad@netcom.com, konrad@ys.com)
+
+04-22-00 Cleaned up possible buffer overflow candidates ( strcpy / sprintf )
+         Fixed bug in PathProc () -- changed return type to int ( instead
+         of char * ).  From time-to-time, gdb showed the target buffer was
+         initialized to a NULL pointer :-(
+         Changed functions in pathproc.c to require a target buffer length
+         in order to eliminate buffer overflows.
+         Rev 4.2 -- Konrad J. Hambrick (konrad@netcom.com konrad@kjh-com.com)
 """
 
 import os
@@ -448,7 +447,7 @@ def choices(defaults):
         flight.rocketwt += stage.totalw
 
     # Environmental Data
-    flight.site_alt = get_float ("Launch Site Altitude in Feet", defaults.site_alt * M2FT) / M2FT
+    flight.site_alt = get_float("Launch Site Altitude in Feet", defaults.site_alt * M2FT) / M2FT
  
     flight.faren_temp = get_float("Air Temp in DegF", defaults.faren_temp)
  
@@ -554,7 +553,7 @@ def calc(flight):
 #  for ( j=0 ; j < stagenum ; j++ )
 #     fprintf ( stream, "%cStage Weight [%d]:  %9.4f\n", ch1, j, stages[j].totalw );
 
-   # What is the effective Diameter
+    # What is the effective Diameter
 
     prev_stage = None
     for stage in flight.rocket.stages:
@@ -568,12 +567,11 @@ def calc(flight):
             if drag_coff < prev_stage.cd:        # kjh added this too
                 drag_coff = prev_stage.cd
 
-
     d = stage_diam * IN2M
 
     # c = r * M_PI * drag_coff * d * d * 0.125;
 
-    drag_constant = 0.5 * drag_coff * ((M_PI * d * d * 0.25) + flight.rocket.fins[this_stage].area)
+    drag_constant = 0.5 * drag_coff * ((math.pi * d * d * 0.25) + flight.rocket.fins[this_stage].area)
 
     c = r * drag_constant
 
@@ -583,7 +581,7 @@ def calc(flight):
         thrust = flight.e_info[0].thrust[1]     # .thrust [ odds ] = Thrust
 
         if thrust != 0.0:
-            accel  = (( thrust - drag ) / mass) - G
+            accel = (thrust - drag) / mass - G
         else:
             accel = 0.0
 
@@ -591,7 +589,7 @@ def calc(flight):
         print_vel = vel * M2FT
         print_accel = accel * M2FT
         print_mass = mass * 1000         # I want my Mass in Grams
-"""
+
       if (verbose)
          fprintf(stream," %4.1lf %10.1lf %10.1lf %10.1lf %11.2lf %10.3lf %10.3lf\n",
                 t, print_alt, print_vel, print_accel, print_mass, thrust, drag );
@@ -599,7 +597,7 @@ def calc(flight):
       print_index = 0;
       thrust = 0 ;
    }
-
+"""
    /* Launch Loop */
 
    for(;;)
