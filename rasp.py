@@ -109,6 +109,7 @@ MACH1_2 = 397.752  # Mach 1.2 in Meters/sec  1305 ft/sec
 TEMP_CORRECTION = 1
 
 G = 9.806650
+DELTA_T = 0.001    # Time interval - 1ms
 DT_DH = 0.006499   # degK per meter
 DT_DF = 0.001981   # degK per foot
 TEMP0 = 273.15     # Temp of air at Std Density at Sea Level
@@ -149,7 +150,7 @@ class Fins:
 
 class Stage:
     def __init__(self):
-        self.engnum = 0      # number of engines in stage
+        self.engnum = 1      # number of engines in stage
         self.start_burn = 0  # Start of engine (includes previous stage)
         self.end_burn = 0    # End of engine burn  (includes previous stage)
         self.end_stage = 0   # End of stage (includes previous stage)
@@ -162,29 +163,57 @@ class Stage:
 
 
 class Rocket:
-    def __init__(self):
+    def __init__(self, name=None):
+        self.name = name
         self.nose = None
         self.stages = []
+        self.stages.append(Stage())
 
 
 class Flight:
     def __init__(self):
-        self.rocket = None
+        self.rocket = Rocket('dummy')
+        self.fname = None
         self.rname = None
         self.ename = None
         self.e_info = None  #
 
         self.verbose = False
         self.rocketwt = 0.0
-        self.drag_coff = 0.0
         self.base_temp = 0.0
         self.faren_temp = 0.0
-        self.mach1_0 = 0.0
         self.site_alt = 0.0
         self.baro_press = 0.0
-        self.rho_0 = 0.0
         self.rod = 0.0
         self.coast_base = 0.0
+
+        self.temp_correction = False
+
+
+class Results:
+    def __init__(self):
+        self.mass = 0.0
+        self.rod = 0.0
+        self.drag_bias = 0
+        self.t_rod = 0.0  # launch rod info
+        self.v_rod = 0.0
+        self.max_accel = 0.0
+        self.t_max_accel = 0.0
+        self.min_accel = 0.0
+        self.t_min_accel = 0.0
+        self.avg_vel = 0.0
+        self.max_vel = 0.0
+        self.t_max_vel = 0.0
+        self.max_alt = 0.0  # kjh added to save max alt
+        self.t_max_alt = 0.0  # kjh added to save time to max alt
+        self.mach1_0 = 0.0
+        self.rho_0 = 0.0
+        self.baro_press = 0.0
+        self.base_temp = 0.0
+        self.site_alt = 0.0
+        self.vcoff = 0.00
+        self.acoff = 0.00
+        self.tcoff = 0.00        # kjh added for cutoff data
 
 
 """
@@ -277,49 +306,6 @@ struct motor_entry {
 """
 
 
-def dump_header(fp, flight):
-    print(CH1, file=fp)
-
-    print("%c Rocket Name: %s" % (CH1, flight.rname), file=fp)
-    print("%c Motor File:  %s" % (CH1, flight.ename), file=fp)
-
-    wt = flight.rocketwt
-    for i, stage in enumerate(flight.rocket.stages):
-        print(CH1, file=fp)
-        print("%c%5s  %-16s  %8s  %8s  %8s  %9s" % (
-          CH1, "Stage", "Engine", "Bare", "Launch", "AirFrame", "Effective"), file=fp)
-
-        print("%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
-          CH1, "Num", "(Qt) Type", "Weight", "Weight", "Diameter",
-          "Diameter", "Cd"), file=fp)
-
-        print("%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
-          CH1, "=====", "================", "========", "========",
-          "========", "=========", "====="), file=fp)
-
-        print("%c%5d  (%1d) %-12s  %8.2f  %8.2f  %8.3f  %9.3f  %5.3f" % (
-          CH1, i + 1, stage.engnum, flight.e_info[i].code,
-          stage.weight / OZ2KG, flight.rocketwt / OZ2KG, stage.maxd,
-          stage.maxd + math.sqrt(stage.fins.area / (IN2M * IN2M * math.pi)) / 2,
-          stage.cd), file=fp)
-
-        wt -= stage.weight + flight.e_info[i].wt * stage.engnum
-
-        raspinfo.print_engine_info(flight.e_info[i])
-
-    if flight.verbose:
-        print(CH1, file=fp)
-        print("%c%4s %10s %10s %10s %11s %10s %10s" % (
-            CH1, "Time", "Altitude", "Velocity", "Accel",
-            "Weight", "Thrust", "Drag"), file=fp)
-        print("%c%4s %10s %10s %10s %11s %10s %10s" % (
-            CH1, "(Sec)", "(Feet)", "(Feet/Sec)", "(Ft/Sec^2)",
-            "(Grams)", "(Newtons)", "(Newtons)"), file=fp)
-        print("%c%4s %10s %10s %10s %11s %10s %10s" % (
-            CH1, "-----", "---------", "---------", "---------",
-            "-----------", "---------", "---------"), file=fp)
-
-
 def get_str(prompt, default):
     entry = input(f"{prompt} [{default}]  ")
     entry = entry.strip()
@@ -367,7 +353,7 @@ def choices(defaults):
 
         prompt = f"Number of engines" + f" in Stage {num + 1}" if num > 0 else ""
 
-        stage.engnum = get_int(prompt + prompt, defaults.stages[0].engnum)
+        stage.engnum = get_int(prompt + prompt, defaults.rocket.stages[0].engnum)
  
         if num == 0:
             rocket.nose = get_nose("Nose (<O>give,<C>onic,<E>lliptic,<P>arabolic,<B>lunt)",
@@ -378,16 +364,17 @@ def choices(defaults):
             prompt = f"Weight of Rocket w/o Engine in Ounces"
 
         # Remember the weight from run to run
-        defaults.o_wt[num] = get_float(prompt, defaults.o_wt[num])
+        defaults.rocket.stages[num].o_wt = get_float(prompt, defaults.rocket.stages[num].o_wt)
  
-        stage.weight = defaults.o_wt[num] * OZ2KG
- 
+        stage.weight = defaults.rocket.stages[num].o_wt * OZ2KG
+        stage.engnum = 1  # of engines in stage
+
         if stagenum > 1:
             prompt = f"Maximum Diameter of Stage {num + 1} in Inches"
         else:
             prompt = f"Maximum Body Diameter in Inches"
  
-        stage.maxd = get_float(prompt, defaults.stages[0].maxd)
+        stage.maxd = get_float(prompt, defaults.rocket.stages[0].maxd)
  
         if stagenum > 1:
             prompt = f"Number of Fins on Stage {num + 1}"
@@ -395,7 +382,7 @@ def choices(defaults):
             prompt = f"Number of Fins"
 
         fins = stage.fins = Fins()
-        fins.num = get_int(prompt, defaults.stages[0].fins.num)
+        fins.num = get_int(prompt, defaults.rocket.stages[0].fins.num)
  
         if fins.num == 0:
             fins.thickness = 0.0
@@ -406,14 +393,14 @@ def choices(defaults):
             else:
                 prompt = f"Max Thickness of Fins (Inches) "
  
-            fins.thickness = get_float(prompt, defaults.stages[0].fins.thickness)
+            fins.thickness = get_float(prompt, defaults.rocket.stages[0].fins.thickness)
  
             if stagenum > 1:
                 prompt = f"Max Span of Fins on Stage {num + 1} (Inches -- From BT, Out) "
             else:
                 prompt = f"Max Span of Fins (Inches -- From BT, Out) "
 
-            fins.span = get_float(prompt, defaults.stages[0].fins.span)
+            fins.span = get_float(prompt, defaults.rocket.stages[0].fins.span)
 
         fins.area = fins.num * fins.thickness * fins.span * IN2M * IN2M
 
@@ -422,7 +409,7 @@ def choices(defaults):
         else:
             prompt = f"Drag Coefficient "
 
-        stage.cd = get_float(prompt, defaults.stages[0].cd)
+        stage.cd = get_float(prompt, defaults.rocket.stages[0].cd)
  
         if num + 1 < stagenum:
             prompt = f"Staging Delay for Stage {num + 2} in Seconds"
@@ -453,13 +440,9 @@ def choices(defaults):
  
     flight.base_temp = (flight.faren_temp - 32) * 5 / 9 + 273.15  # convert to degK
  
-    flight.mach1_0 = math.sqrt(MACH_CONST * flight.base_temp)
- 
     baro_press = 1 - (0.00000688 * flight.site_alt * M2FT)
     baro_press = STD_ATM * math.exp(5.256 * math.log(baro_press))
     flight.baro_press = get_float("Barometric Pressure at Launch Site", baro_press)
- 
-    flight.rho_0 = (baro_press * IN2PASCAL) / (GAS_CONST_AIR * flight.base_temp)
  
     flight.rod = get_float("Launch Rod Length ( inch )", defaults.rod / IN2M) * IN2M
 
@@ -486,6 +469,8 @@ def choices(defaults):
         fname = '.'.join([bname, flight.e_info[0].code])
         flight.fname = get_str("Enter File Name", fname)
 
+    return flight
+
 
 def calc(flight):
     thrust_index = 0                  # index into engine table
@@ -493,90 +478,56 @@ def calc(flight):
     this_stage = 0                    # current stage
     stage_time = 0.0                  # elapsed time for current stage
     burn_time = 0.0                   # Elapsed time for motor burn
-    stage_wt = 0.0                    # current wt of this_stage
     stage_diam = 0.0                  # max diam at current time
-    t_rod = 0.0                       # launch rod info
-    v_rod = 0.0
-    cc = 0
-    drag_bias = 0
-    thrust = 0.0                      # Thrust
+    drag_coff = 0.0                   # max cd for all stages
     vel = 0.0                         # Velocity
-    accel = 0.0                       # Acceleration
     alt = LAUNCHALT                   # Altitude
-    print_vel = False
-    print_alt = False
-    print_accel = False
-    print_mass = False                # used for printing
 
-    mass = 0.0
     t = 0.000000
-    max_accel = 0.0
-    t_max_accel = 0.0
-    min_accel = 0.0
-    t_min_accel = 0.0
-    max_vel = 0.0
-    t_max_vel = 0.0
-    max_alt = 0.0                     # kjh added to save max alt
-    max_t = 0.0                       # kjh added to save time to max alt
     drag = 0.0                        # kjh added to print Drag in Nt
 
     old_vel = 0.0                     # kjh added to avg vel in interval
-    avg_vel = 0.0                     # kjh ditto
 
     sum_o_thrust = 0.0                # kjh added to reduce pro mass ~ thrust
-
     old_thrust = 0.0                  # last engine thrust  from table
     old_time = 0.0                    # last engine thrust time  from table
 
-    print_index = 0                   # used for print loop
     launched = 0                      # indicates rocket has lifted off
 
-    delta_t = 0.001                   # Time interval - 1us
-    ten_over_delta_t = 100
-    r = flight.rho_0                         # rho == Air Density for drag calc
-
-# double air_density()                # kjh put this inline
-
-    drag_constant = 0.0               # compute once-per-stage
     coast_time = 0.00                 # kjh to coast after burnout
 
-    vcoff = 0.00
-    acoff = 0.00
-    tcoff = 0.00                      # kjh added for cutoff data
+    results = Results()
 
-    dT = 0                            # change in temp vs altitude
+    results.mach1_0 = math.sqrt(MACH_CONST * flight.base_temp)
+    results.baro_press = flight.baro_press
+    results.base_temp = flight.base_temp
+    results.site_alt = flight.site_alt
 
-    stage_wt = flight.rocket.stages[this_stage].totalw
+    # rho == Air Density for drag calc
+    results.rho_0 = (flight.baro_press * IN2PASCAL) / (GAS_CONST_AIR * flight.base_temp)
 
     mass = flight.rocketwt
-   
+
 #  for ( j=0 ; j < stagenum ; j++ )
 #     fprintf ( stream, "%cStage Weight [%d]:  %9.4f\n", ch1, j, stages[j].totalw );
 
-    # What is the effective Diameter
-
+    # What is the effective Diameter and drag coeff
     prev_stage = None
     for stage in flight.rocket.stages:
-        stage_diam = stage.maxd
-        drag_coff = stage.cd          # kjh Added This
-
         if prev_stage:
-            if stage_diam < prev_stage.maxd:
-                stage_diam = prev_stage.maxd
-
-            if drag_coff < prev_stage.cd:        # kjh added this too
-                drag_coff = prev_stage.cd
-
-    d = stage_diam * IN2M
+            stage_diam = max(stage_diam, prev_stage.maxd)
+            drag_coff = max(drag_coff, prev_stage.cd)
+        else:
+            stage_diam = stage.maxd
+            drag_coff = stage.cd
 
     # c = r * M_PI * drag_coff * d * d * 0.125;
 
-    drag_constant = 0.5 * drag_coff * ((math.pi * d * d * 0.25) + flight.rocket.fins[this_stage].area)
-
-    c = r * drag_constant
+    # c = r * drag_constant
 
     # kjh wants to see thrust at t=0 if there is any ...
 
+    accel = 0.0
     if flight.e_info[0].thrust[0] == 0.0:       # .thrust [ evens ] = Time
         thrust = flight.e_info[0].thrust[1]     # .thrust [ odds ] = Thrust
 
@@ -585,352 +536,316 @@ def calc(flight):
         else:
             accel = 0.0
 
-        print_alt = alt * M2FT
-        print_vel = vel * M2FT
-        print_accel = accel * M2FT
-        print_mass = mass * 1000         # I want my Mass in Grams
-
-      if (verbose)
-         fprintf(stream," %4.1lf %10.1lf %10.1lf %10.1lf %11.2lf %10.3lf %10.3lf\n",
-                t, print_alt, print_vel, print_accel, print_mass, thrust, drag );
-
-      print_index = 0;
-      thrust = 0 ;
-   }
-"""
-   /* Launch Loop */
-
-   for(;;)
-   {
-      /* Calculate decreasing air density */
-
-/*    r = air_density (alt,site_alt,base_temp);  */
+    # Launch Loop
+    while True:
+        # Calculate decreasing air density
 
-/*    y = alt+site_alt ;                         */
-      y = alt ;
+        # r = air_density (alt,site_alt,base_temp);
 
-      if ( y > SPACEALT )
-         r = 0 ;
-      elif y > MAXALT )
-      {
-         /* r = 1.7187 * exp ( -1.5757e-4 * y ) ; */
-         r = 1.9788 * exp ( -1.5757e-4 * y ) ;
-      }
-      else
-      {
-         r = Rho_0 * exp ( 4.255 * log ( 1 - ( y * 2.2566e-5 ))) ;
-      }
+        # y = alt + site_alt;
+        y = alt
 
-#ifdef TEMP_CORRECTION
+        if y > SPACEALT:
+            r = 0
+        elif y > MAXALT:
+            # r = 1.7187 * exp(-1.5757e-4 * y);
+            r = 1.9788 * math.exp(-1.5757e-4 * y)
+        else:
+            r = results.rho_0 * math.exp(4.255 * math.log(1 - (y * 2.2566e-5)))
 
-       dT = ISAtemp ( base_temp, y ) ;
+        if flight.temp_correction:
+            dt = isa_temp(flight.base_temp, y)
 
-      mach1_0 = sqrt ( MACH_CONST * dT );
+            mach1_0 = math.sqrt(MACH_CONST * dt)
 
-#endif
+        # c = r * M_PI * drag_coff * d * d * 0.125
 
-      /* c = r * M_PI * drag_coff * d * d * 0.125;      /* kjh changed this */
+        d = stage_diam * IN2M
+        drag_constant = 0.5 * drag_coff * ((math.pi * d * d * 0.25) + flight.rocket.fins[this_stage].area)
 
-      c = r * drag_constant ;
+        c = r * drag_constant
 
-      t += delta_t;
-      stage_time += delta_t;
+        t += DELTA_T
+        stage_time += DELTA_T
 
-      /* handle staging, if needed */
+        # handle staging, if needed
+        if (t > stages[this_stage].end_stage) and (this_stage < stagenum-1):
+            thrust_index = 0
+            old_thrust = 0.0
+            sum_o_thrust = 0.0
+            old_time = 0.0
 
-      if ((t > stages[this_stage].end_stage) && (this_stage < stagenum-1))
-      {
-          thrust_index = 0;
-          old_thrust = 0.0;
-          sum_o_thrust = 0.0 ;
-          old_time = 0.0;
+            stage_wt = flight.rocket.stages[this_stage].totalw
+            # mass = rocketwt - stage_wt
+            # TODO: this implies modifying flight which we shouldn't do
+            rocketwt -= stage_wt  # kjh 95-10-29
+            mass = rocketwt
 
-/*        mass = rocketwt - stage_wt;         */
-          mass = ( rocketwt -= stage_wt );   /* kjh 95-10-29 */
+            this_stage += 1
 
-          this_stage++;
-          stage_wt = stages[this_stage].totalw;
+            stage_engcnum = stages[this_stage].engcnum
+            stage_time = burn_time = 0
 
-          stage_engcnum = stages[this_stage].engcnum;
-          stage_time = burn_time = 0;
+            for (j = this_stage; j < stagenum; j++):
+                stage_diam = stages[j].maxd
+                drag_coff = stages[j].cd  # kjh Added This
 
-          for (j = this_stage; j < stagenum; j++)
-          {
-              stage_diam = stages[j].maxd;
-              drag_coff  = stages[j].cd ;                /* kjh Added This */
+                if j > this_stage:
+                    if stage_diam < stages[j-1].maxd:
+                        stage_diam = stages[j-1].maxd
 
-              if (j > this_stage)
-              {
-                  if (stage_diam < stages[j-1].maxd)
-                      stage_diam = stages[j-1].maxd;
+                    if drag_coff < stages[j-1].cd:  # kjh added this too
+                        drag_coff = stages[j-1].cd
 
-                  if ( drag_coff < stages[j-1].cd )      /* kjh added this too */
-                     drag_coff = stages[j-1].cd ;
-              }
-          }
-          /*       1                                              */
-          /*  c = --- * PI * d ^ 2 * R * k                        */
-          /*       8                                              */
-          /*                                                      */
-          /*        1                                             */
-          /*     = --- * PI * r ^ 2 * R * k                       */
-          /*        2                                             */
-          /*                                                      */
-          /*                     m^2 * kg                         */
-          /*     =  A * R * k   ----------                        */
-          /*                     m^3                              */
-          /*                                                      */
-          /*        kg                                            */
-          /*     = ----                                           */
-          /*         m                                            */
-          /*                                                      */
+            """
+                 1
+            c = --- * PI * d ^ 2 * R * k
+                 8
+            
+                 1
+              = --- * PI * r ^ 2 * R * k
+                 2
+            
+                              m^2 * kg
+              =  A * R * k   ----------
+                              m^3
+                 kg
+              = ----
+                 m
+            """
+            # c = r * M_PI * drag_coff * d * d * 0.125
 
-           d = stage_diam * IN2M;
+            d = stage_diam * IN2M
+            drag_constant = 0.5 * drag_coff * ((math.pi * d * d * 0.25) + fins[this_stage].area)
 
-           /*          c = r * M_PI * drag_coff * d * d * 0.125; */
+            c = r * drag_constant
 
-           drag_constant = 0.5 * drag_coff * (( M_PI * d * d * 0.25 ) + fins[this_stage].area ) ;
+            # TODO: move this
+            fprintf(stream, "%cStage %d Ignition at %5.2f sec.\n", ch1, this_stage+1, t)
 
-           c = r * drag_constant;
+        # Handle the powered phase of the boost
+        if stages[this_stage].start_burn <= t <= stages[this_stage].end_burn:
 
-          fprintf(stream,"%cStage %d Ignition at %5.2f sec.\n", ch1, this_stage+1, t );
-      }
+            burn_time += DELTA_T  # add to burn time
 
-      /* Handle the powered phase of the boost */
+            # see if we need to use the next thrust point
+            # All times are relative to burn time for these calculations
 
-      if ((t >= stages[this_stage].start_burn) &&
-          (t <= stages[this_stage].end_burn))
-      {
+            if burn_time > e_info[stage_engcnum].thrust[thrust_index]:
+                old_time = e_info[stage_engcnum].thrust[thrust_index]
 
-        burn_time +=  delta_t;               /* add to burn time */
+                thrust_index += 1
 
-        /* see if we need to use the next thrust point */
-        /* All times are relative to burn time for these calculations */
+                old_thrust = e_info[stage_engcnum].thrust[thrust_index]
 
-        if (burn_time > e_info[stage_engcnum].thrust[thrust_index])
-        {
-            old_time = e_info[stage_engcnum].thrust[thrust_index];
+                thrust_index += 1
 
-            thrust_index++;
+            # Logic to smooth transision between thrust points.
+            # Transisions are linear rather than discontinuous.
 
-            old_thrust = e_info[stage_engcnum].thrust[thrust_index];
+            thrust = e_info[stage_engcnum].thrust[thrust_index + 1] - old_thrust
 
-            thrust_index++;
-        }
-        /*
+            thrust *= (burn_time - old_time) / (e_info[stage_engcnum].thrust[thrust_index] - old_time)
 
-           Logic to smooth transision between thrust points.
-           Transisions are linear rather than discontinuous.
-        */
+            thrust += old_thrust
 
-        thrust = e_info[stage_engcnum].thrust[thrust_index + 1] - old_thrust;
+            thrust *= stages[this_stage].engnum
 
-        thrust *=               (burn_time - old_time) /
-                    ( e_info[stage_engcnum].thrust[thrust_index] - old_time );
+            # kjh changed this to comsume propellant at thrust rate
 
-        thrust += old_thrust;
+            sum_o_thrust += (thrust * DELTA_T)
 
-        thrust *= stages[this_stage].engnum;
+            m1 = sum_o_thrust / (e_info[stage_engcnum].ntot * stages[this_stage].engnum)
 
-        /* kjh changed this to comsume propellant at thrust rate */
+            m1 *= e_info[stage_engcnum].m2 * stages[this_stage].engnum
 
-        sum_o_thrust += ( thrust * delta_t );
+            # This is the Original Method
+            #
+            # m1 = (e_info[stage_engcnum].m2 / e_info[stage_engcnum].t2) * DELTA_T
+            # stage_wt -= m1
+            # mass = rocketwt -= m1
+            #
+            # fprintf ( stderr, "Sum ( %f ) = %10.2f  ;  Mass = %10.6f\n", burn_time, sum_o_thrust, m1 )
 
-        m1 =                       sum_o_thrust /
-              ( e_info[stage_engcnum].ntot * stages[this_stage].engnum );
+            mass = rocketwt - m1
+        else:
+            thrust = 0.0
 
-        m1 *= e_info[stage_engcnum].m2 * stages[this_stage].engnum ;
+            if results.tcoff == 0.0 and this_stage == (flight.stagenum - 1):
+                results.vcoff = vel
+                results.acoff = alt
+                results.tcoff = t
 
-        /*       This is the Original Method       */
-        /*                                         */
-        /*       m1 = (e_info[stage_engcnum].m2 / e_info[stage_engcnum].t2) * delta_t; */
-        /*       stage_wt -= m1;                   */
-        /*       mass = rocketwt -= m1;            */
-        /*                                         */
-        /*       fprintf ( stderr, "Sum ( %f ) = %10.2f  ;  Mass = %10.6f\n", burn_time, sum_o_thrust, m1 ); */
+        """
+        Crude approximations for MACH 1 Transition.
+        the drag bias will be applied to the subsonic value.
+        It will be equal to 1.0 for velocities less than MACH 0.8.
+        From MACH 0.8 to MACH 1.0 it will increase linearly to 2.0 times
+        the subsonic value.  From MACH 1.0 to MACH 1.2 it will decrease to
+        1.5 times the subsonic value.  Above MACH 1.2 it will remain at
+        a value of 1.5
+        """
 
-        mass = rocketwt - m1 ;
+        results.avg_vel = (old_vel + vel) / 2  # kjh added this
 
-      }
-      else
-      {
-        thrust = 0.0;
+        # kjh Added M,C&B Model for TransSonic Region
 
-         if (( tcoff == 0.0 ) && ( this_stage == ( stagenum - 1 )))
-         {
-            vcoff = vel ;
-            acoff = alt ;
-            tcoff = t ;
-         }
-      }
+        results.drag_bias = drag_diverge(flight.rocket.nose, results.mach1_0, vel)
 
-       /*
-       Crude approximations for MACH 1 Transition.
-       the drag bias will be applied to the subsonic value.
-       It will be equal to 1.0 for velocities less than MACH 0.8.
-       From MACH 0.8 to MACH 1.0 it will increase linearly to 2.0 times
-       the subsonic value.  From MACH 1.0 to MACH 1.2 it will decrease to
-       1.5 times the subsonic value.  Above MACH 1.2 it will remain at
-       a value of 1.5
-       */
+        # kjh replaced this with DragDiverge
 
-      avg_vel = ( old_vel + vel ) / 2 ;        /* kjh added this */
+        """
+        if (vel < mach0_8)
+            drag_bias = 1;
+        elif vel < mach1_0)
+            drag_bias = (1.0 + ((vel - mach0_8) / (mach1_0 - mach0_8)));
+        elif vel < mach1_2)
+            drag_bias = (2.0 - 0.5*((vel - mach1_0) / (mach1_2 - mach1_0)));
+        else
+            drag_bias = 1.5;
+        """
 
-      /*    kjh Added M,C&B Model for TransSonic Region */
+        cc = c * results.drag_bias
 
-      drag_bias = DragDiverge ( Nose, mach1_0, vel ) ;
+        """
+        /* Simple Newton calculations                      */
+        /* kjh changed for coasting after burnout          */
+        /*                                                 */
+        /* cc                         = kg / m             */
+        /* accel                      = m / sec^2          */
+        /*                                                 */
+        /* kg  *    m *    m                m              */
+        /* -------------------------  =  ------            */
+        /*  m  *  sec *  sec *   kg       sec^2            */
+        """
 
-      /*    kjh replaced this with DragDiverge */
+        # kjh added to compute drag and report it in N
+        # drag = - ( cc * vel * vel ) ;
+        drag = - (cc * results.avg_vel * results.avg_vel)  # kjh changed this 05-23-96
 
-/*    if (vel < mach0_8)
-        drag_bias = 1;
-      elif vel < mach1_0)
-        drag_bias = (1.0 + ((vel - mach0_8) / (mach1_0 - mach0_8)));
-      elif vel < mach1_2)
-        drag_bias = (2.0 - 0.5*((vel - mach1_0) / (mach1_2 - mach1_0)));
-      else
-        drag_bias = 1.5;
- */
-
-      cc = c * drag_bias;
-
-      /* Simple Newton calculations                      */
-      /* kjh changed for coasting after burnout          */
-      /*                                                 */
-      /* cc                         = kg / m             */
-      /* accel                      = m / sec^2          */
-      /*                                                 */
-      /* kg  *    m *    m                m              */
-      /* -------------------------  =  ------            */
-      /*  m  *  sec *  sec *   kg       sec^2            */
-
-      /* kjh added to compute drag and report it in N    */
-
-/*    drag = - ( cc * vel * vel ) ;                                         */
-      drag = - ( cc * avg_vel * avg_vel ) ;    /* kjh changed this 05-23-96 */
-
-      if (( launched ) && ( vel <= 0 ))
-      {
-         drag = - drag ;
-         accel = ( drag / mass ) - G;             /* kjh added this */
-      }
-      else
-         accel = (( thrust + drag ) / mass) - G;
-
-      old_vel = vel ;                             /* kjh added this */
-
-      vel = vel + accel * delta_t;
-
-      alt = alt + vel * delta_t;
-
-      /* test for lift-off and apogee */
-
-      if ( vel > 0 )
-          launched = 1;                 /* LIFT-OFF */
-
-      elif !launched && ( vel < 0 ))
-          alt = vel = accel = 0;        /* can't fall off pad! */
-
-      elif launched && ( vel < 0 ))
-      {
-        coast_time += delta_t;       /* time past burnout  */
-
-        if (( alt <= 0.0 ) || ( coast_time > coast_base )) /* kjh to coast a while */
-        {
-          break;                        /* apogee, all done */
-        }
-      }
-
-      if ((alt <= Rod) && ( vel > 0 ))
-      {
-        t_rod = t;
-        v_rod = vel * M2FT;
-      }
-
-      /* do max evaluations */
-
-      if (accel > max_accel)
-      {
-         max_accel = accel;
-         t_max_accel = t ;
-      }
-      elif accel < min_accel )
-      {
-         min_accel = accel;
-         t_min_accel = t ;
-      }
-
-      if (vel > max_vel)
-      {
-         max_vel = vel;
-         t_max_vel = t ;
-      }
-
-      if (alt > max_alt)
-      {
-         max_alt = alt;
-         max_t = t;
-      }
-
-      /* See if we need to print out the current values */
-
-      if ((++ print_index ) == ten_over_delta_t )
-      {
-         print_index = 0;
-         print_alt = alt * M2FT;
-         print_vel = vel * M2FT;
-         print_accel = accel * M2FT;
-         print_mass = mass * 1000 ;             /* Gimme my Mass in Grams */
-      /*
-         if (verbose)
-            fprintf(stream," %4.1lf %10.1lf %10.1lf %10.2lf %11.2lf %10.3lf %10.3lf %10g %7.4f\n",
-                t, print_alt, print_vel, print_accel, print_mass, thrust, drag, r, mach1_0 );
-      */
-         if (verbose)
-            fprintf(stream," %4.1lf %10.1lf %10.1lf %10.2lf %11.2lf %10.3lf %10.3lf\n",
-                t, print_alt, print_vel, print_accel, print_mass, thrust, drag );
-
-      }
-   }
-   if (print_index != 0)
-   {
-      print_index = 0;
-      print_alt = alt * M2FT;
-      print_vel = vel * M2FT;
-      print_accel = accel * M2FT;
-      print_mass = mass * 1000 ;
-   /*
-      fprintf(stream," %5.2lf %9.1lf %10.1lf %10.2lf %11.2lf %10.3lf %10.3lf %6.4f\n",
-                        t-delta_t, print_alt, print_vel, print_accel, print_mass, thrust, drag, r );
-    */
-      if ( verbose )
-         fprintf(stream," %5.2lf %9.1lf %10.1lf %10.2lf %11.2lf %10.3lf %10.3lf\n",
-                           t-delta_t, print_alt, print_vel, print_accel, print_mass, thrust, drag );
-   }
-   print_alt = max_alt * M2FT;              /* kjh changed for coasting */
-   print_vel = vel * M2FT;
-   print_accel = accel * M2FT;
-   print_mass = mass / OZ2KG;
-   fprintf(stream, "%c\n%cMaximum altitude attained = %.1lf feet (%.1lf meters).\n",
-      ch1,ch1, print_alt, max_alt);
-   fprintf(stream, "%cTime to peak altitude =     %.2lf seconds.\n", ch1, max_t);
-   fprintf(stream, "%cMaximum velocity =          %.1lf feet/sec at %.2lf sec.\n",
-       ch1, max_vel * M2FT, t_max_vel );
-   fprintf(stream, "%cCutoff velocity =           %.1lf feet/sec at %.1lf feet ( %.2lf sec ).\n",
-      ch1, vcoff*M2FT, acoff*M2FT, tcoff ) ;
-   fprintf(stream, "%cMaximum acceleration =      %.1lf feet/sec^2 at %.2lf sec.\n",
-      ch1, max_accel * M2FT, t_max_accel );
-   fprintf(stream, "%cMinimum acceleration =      %.1lf feet/sec^2 at %.2lf sec.\n",
-      ch1, min_accel * M2FT, t_min_accel );
-   fprintf(stream, "%cLaunch rod time =  %.2lf,  rod len   = %.1lf,       velocity  = %.1lf\n",
-           ch1, t_rod, Rod*M2FT, v_rod);
-   fprintf(stream, "%cSite Altitude =   %5.0lf,  site temp = %.1lf F\n",
-           ch1, site_alt*M2FT, (( base_temp - 273.15 ) * 9 / 5 ) + 32 ) ;
-   fprintf(stream, "%cBarometer     =   %.2f,  air density = %.4lf,  Mach vel  = %.1lf\n",
-           ch1, baro_press, Rho_0, M2FT * sqrt ( MACH_CONST * base_temp )) ;
-   fclose(stream);
-}
-"""
+        # TODO: This should be building a set of results vectors
+        if launched and vel <= 0:
+            drag = - drag
+            accel = (drag / mass) - G  # kjh added this */
+        else:
+            accel = ((thrust + drag) / mass) - G
+
+        old_vel = vel  # kjh added this */
+
+        vel = vel + accel * DELTA_T
+
+        alt = alt + vel * DELTA_T
+
+        # test for lift-off and apogee
+        if vel > 0:
+            launched = 1  # LIFT-OFF
+        elif not launched and vel < 0:
+            alt = vel = accel = 0  # can't fall off pad!
+        elif launched and vel < 0:
+            coast_time += DELTA_T  # time past burnout
+
+            if (alt <= 0.0) or (coast_time > flight.coast_base):  # kjh to coast a while
+                break  # apogee, all done
+
+        if alt <= flight.rod and vel > 0:
+            results.t_rod = t
+            results.v_rod = vel * M2FT
+
+        # do max evaluations
+        if accel > results.max_accel:
+            results.max_accel = accel
+            results.t_max_accel = t
+
+        elif accel < results.min_accel:
+            results.min_accel = accel
+            results.t_min_accel = t
+
+        if vel > results.max_vel:
+            results.max_vel = vel
+            results.t_max_vel = t
+
+        if alt > results.max_alt:
+            results.max_alt = alt
+            results.t_max_alt = t
+
+    return results
+
+
+def dump_header(fp, flight):
+    print(CH1, file=fp)
+
+    print("%c Rocket Name: %s" % (CH1, flight.rname), file=fp)
+    print("%c Motor File:  %s" % (CH1, flight.ename), file=fp)
+
+    wt = flight.rocketwt
+    for i, stage in enumerate(flight.rocket.stages):
+        print(CH1, file=fp)
+        print("%c%5s  %-16s  %8s  %8s  %8s  %9s" % (
+          CH1, "Stage", "Engine", "Bare", "Launch", "AirFrame", "Effective"), file=fp)
+
+        print("%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
+          CH1, "Num", "(Qt) Type", "Weight", "Weight", "Diameter",
+          "Diameter", "Cd"), file=fp)
+
+        print("%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
+          CH1, "=====", "================", "========", "========",
+          "========", "=========", "====="), file=fp)
+
+        print("%c%5d  (%1d) %-12s  %8.2f  %8.2f  %8.3f  %9.3f  %5.3f" % (
+          CH1, i + 1, stage.engnum, flight.e_info[i].code,
+          stage.weight / OZ2KG, flight.rocketwt / OZ2KG, stage.maxd,
+          stage.maxd + math.sqrt(stage.fins.area / (IN2M * IN2M * math.pi)) / 2,
+          stage.cd), file=fp)
+
+        wt -= stage.weight + flight.e_info[i].wt * stage.engnum
+
+        raspinfo.print_engine_info(flight.e_info[i])
+
+    if flight.verbose:
+        print(CH1, file=fp)
+        print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+            CH1, "Time", "Altitude", "Velocity", "Accel",
+            "Weight", "Thrust", "Drag"), file=fp)
+        print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+            CH1, "(Sec)", "(Feet)", "(Feet/Sec)", "(Ft/Sec^2)",
+            "(Grams)", "(Newtons)", "(Newtons)"), file=fp)
+        print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+            CH1, "-----", "---------", "---------", "---------",
+            "-----------", "---------", "---------"), file=fp)
+
+
+def display_results(results, fp):
+    for i, tee in enumerate(results.tee):
+        if i % 10 == 0:
+            print_alt = results.alt[i] * M2FT
+            print_vel = results.vel[i] * M2FT
+            print_accel = results.accel[i] * M2FT
+            print_mass = results.mass[i] * 1000  # I want my Mass in Grams
+
+            if args.quiet:
+                print(" %4.1lf %10.1lf %10.1lf %10.1lf %11.2lf %10.3lf %10.3lf" % (
+                      tee, print_alt, print_vel, print_accel,
+                      print_mass, results.thrust[i], results.drag[i]), file=fp)
+
+    print(CH1, file=fp)
+    print("%cMaximum altitude attained = %.1lf feet (%.1lf meters)" % (
+          CH1, results.max_alt * M2FT, results.max_alt), file=fp)
+    print("%cTime to peak altitude =     %.2lf seconds" % (CH1, results.max_t), file=fp)
+    print("%cMaximum velocity =          %.1lf feet/sec at %.2lf sec" % (
+            CH1, results.max_vel * M2FT, results.t_max_vel), file=fp)
+    print("%cCutoff velocity =           %.1lf feet/sec at %.1lf feet ( %.2lf sec )" % (
+           CH1, results.vcoff * M2FT, results.acoff * M2FT, results.tcoff), file=fp)
+    print("%cMaximum acceleration =      %.1lf feet/sec^2 at %.2lf sec" % (
+           CH1, results.max_accel * M2FT, results.t_max_accel), file=fp)
+    print("%cMinimum acceleration =      %.1lf feet/sec^2 at %.2lf sec" % (
+           CH1, results.min_accel * M2FT, results.t_min_accel), file=fp)
+    print("%cLaunch rod time =  %.2lf,  rod len   = %.1lf,       velocity  = %.1lf" % (
+           CH1, results.t_rod, results.rod*M2FT, results.v_rod), file=fp)
+    print("%cSite Altitude =   %5.0lf,  site temp = %.1lf F" % (
+           CH1, results.site_alt * M2FT, ((results.base_temp - 273.15) * 9 / 5) + 32), file=fp)
+    print("%cBarometer     =   %.2f,  air density = %.4lf,  Mach vel  = %.1lf" % (
+          CH1, results.baro_press, results.rho_0, results.mach1_0 * M2FT),
+          file=fp)
 
 
 def parse_commandline():
@@ -970,15 +885,13 @@ def main():
         print("Prog Name = ", prog_name)
         print("Eng File  = ", ename)
 
-    flight = Flight()
-
-    flight.faren_temp = 59
-    flight.site_alt = LAUNCHALT / M2FT
-    flight.baro_press = STD_ATM
-    flight.rod = ROD
-
-    for stage in flight.rocket.stages:
-        stage.engnum = 1  # of engines in stage
+    defaults = Flight()
+    defaults.faren_temp = 59
+    defaults.site_alt = LAUNCHALT / M2FT
+    defaults.baro_press = STD_ATM
+    defaults.rod = ROD
+    defaults.rocketwt = 0
+    defaults.nexteng = 0
 
     # this is the batch mode block ( see n.c )
     if args.raspfiles:
@@ -986,10 +899,7 @@ def main():
             nc.batch_flite(rasp)
     else:
         while True:
-            flight.rocketwt = 0
-            flight.nexteng = 0
-
-            choices()
+            flight = choices(defaults)
 
             with open(flight.fname) as fp:
                 dump_header(fp, flight)
