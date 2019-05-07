@@ -437,24 +437,17 @@ def choices(defaults):
 
 
 def calc(flight):
-    thrust_index = 0                  # index into engine table
     stage_engcnum = 0                 # engcnum for current stage
     this_stage = 0                    # current stage
     stage_time = 0.0                  # elapsed time for current stage
-    burn_time = 0.0                   # Elapsed time for motor burn
+    #burn_time = 0.0                   # Elapsed time for motor burn
     stage_diam = 0.0                  # max diam at current time
     drag_coff = 0.0                   # max cd for all stages
-
     drag = 0.0                        # kjh added to print Drag in Nt
-
-    old_vel = 0.0                     # kjh added to avg vel in interval
-
     sum_o_thrust = 0.0                # kjh added to reduce pro mass ~ thrust
     old_thrust = 0.0                  # last engine thrust  from table
     old_time = 0.0                    # last engine thrust time  from table
-
     launched = 0                      # indicates rocket has lifted off
-
     coast_time = 0.00                 # kjh to coast after burnout
 
     results = Results()
@@ -484,34 +477,21 @@ def calc(flight):
     # c = r * drag_constant
 
     # kjh wants to see thrust at t=0 if there is any ...
-    # Todo: this was part of a print routine.  It's a kludge that prints a value for
-    #       time = 0.  We should just capture all the values instead
-
-    accel = 0.0
-    # Todo: thrust odd/even is not longer valid
-    if flight.e_info[0].thrust[0] == 0.0:       # .thrust [ evens ] = Time
-        thrust = flight.e_info[0].thrust[1]     # .thrust [ odds ] = Thrust
-
-        if thrust != 0.0:
-            accel = (thrust - drag) / mass - G
-        else:
-            accel = 0.0
-
-    # T0
-    # todo: finish list setup
     results.tee = [0.0]
     results.alt = [LAUNCHALT]
-
+    results.acc = [0.0]
+    if flight.e_info[0].thrust[0] == 0.0:       # .thrust[0] = Time
+        thrust = flight.e_info[0].thrust[1]     # .thrust[1] = Thrust
+        if thrust != 0.0:
+            results.acc = [(thrust - drag) / mass - G]
+  
     # Launch Loop
     t = 0.000000
     while True:
         # Calculate decreasing air density
 
-        # r = air_density (alt,site_alt,base_temp);
-
-        # y = alt + site_alt;
-        y = alt
-
+        # todo: r = air_density (alt,site_alt,base_temp);
+        y = alt[-1]
         if y > SPACEALT:
             r = 0
         elif y > MAXALT:
@@ -522,10 +502,7 @@ def calc(flight):
 
         if flight.temp_correction:
             dt = isa_temp(flight.base_temp, y)
-
-            mach1_0 = math.sqrt(MACH_CONST * dt)
-
-        # c = r * M_PI * drag_coff * d * d * 0.125
+            results.mach1_0 = math.sqrt(MACH_CONST * dt)
 
         d = stage_diam * IN2M
         drag_constant = 0.5 * drag_coff * ((math.pi * d * d * 0.25) + flight.rocket.fins[this_stage].area)
@@ -543,10 +520,7 @@ def calc(flight):
             old_time = 0.0
 
             stage_wt = flight.stage_wt(this_stage)
-            # mass = rocketwt - stage_wt
-            # TODO: this implies modifying flight which we shouldn't do
-            rocketwt -= stage_wt  # kjh 95-10-29
-            mass = rocketwt
+            mass -= stage_wt
 
             this_stage += 1
 
@@ -592,24 +566,17 @@ def calc(flight):
 
         # Handle the powered phase of the boost
         if stages[this_stage].start_burn <= t <= stages[this_stage].end_burn:
-
             burn_time += DELTA_T  # add to burn time
 
             # see if we need to use the next thrust point
             # All times are relative to burn time for these calculations
-
-            if burn_time > flight.e_info[stage_engcnum].thrust[thrust_index]:
-                old_time = flight.e_info[stage_engcnum].thrust[thrust_index]
-
-                thrust_index += 1
-
-                old_thrust = flight.e_info[stage_engcnum].thrust[thrust_index]
-
+            if burn_time > flight.e_info[stage_engcnum].thrust[thrust_index][0]:
+                old_time = flight.e_info[stage_engcnum].thrust[thrust_index][0]
+                old_thrust = flight.e_info[stage_engcnum].thrust[thrust_index][1]
                 thrust_index += 1
 
             # Logic to smooth transision between thrust points.
-            # Transisions are linear rather than discontinuous.
-
+            # Transisions are linear rather than discontinuous
             thrust = flight.e_info[stage_engcnum].thrust[thrust_index + 1] - old_thrust
 
             thrust *= (burn_time - old_time) / (e_info[stage_engcnum].thrust[thrust_index] - old_time)
@@ -634,7 +601,7 @@ def calc(flight):
             #
             # fprintf ( stderr, "Sum ( %f ) = %10.2f  ;  Mass = %10.6f\n", burn_time, sum_o_thrust, m1 )
 
-            mass = rocketwt - m1
+            mass -= m1
         else:
             thrust = 0.0
 
@@ -653,15 +620,13 @@ def calc(flight):
         a value of 1.5
         """
 
-        results.avg_vel = (old_vel + vel) / 2  # kjh added this
+        results.avg_vel = (old_vel + vel) / 2
 
         # kjh Added M,C&B Model for TransSonic Region
-
         results.drag_bias = drag_diverge(flight.rocket.nose, results.mach1_0, vel)
 
-        # kjh replaced this with DragDiverge
-
         """
+        # kjh replaced this with DragDiverge
         if (vel < mach0_8)
             drag_bias = 1;
         elif vel < mach1_0)
@@ -675,15 +640,15 @@ def calc(flight):
         cc = c * results.drag_bias
 
         """
-        /* Simple Newton calculations                      */
-        /* kjh changed for coasting after burnout          */
-        /*                                                 */
-        /* cc                         = kg / m             */
-        /* accel                      = m / sec^2          */
-        /*                                                 */
-        /* kg  *    m *    m                m              */
-        /* -------------------------  =  ------            */
-        /*  m  *  sec *  sec *   kg       sec^2            */
+        /* Simple Newton calculations
+        /* kjh changed for coasting after burnout
+        
+        /* cc                         = kg / m
+        /* accel                      = m / sec^2
+
+        /* kg  *    m *    m                m
+        /* -------------------------  =  ------
+        /*  m  *  sec *  sec *   kg       sec^2
         """
 
         # kjh added to compute drag and report it in N
@@ -696,8 +661,6 @@ def calc(flight):
             accel = (drag / mass) - G  # kjh added this */
         else:
             accel = ((thrust + drag) / mass) - G
-
-        old_vel = vel  # kjh added this */
 
         vel = vel + accel * DELTA_T
 
@@ -815,7 +778,7 @@ def display_results(results, fp):
     print("%cMinimum acceleration =      %.1lf feet/sec^2 at %.2lf sec" % (
            CH1, results.min_accel * M2FT, results.t_min_accel), file=fp)
     print("%cLaunch rod time =  %.2lf,  rod len   = %.1lf,       velocity  = %.1lf" % (
-           CH1, results.t_rod, results.rod*M2FT, results.v_rod), file=fp)
+           CH1, results.t_rod, results.rod * M2FT, results.v_rod), file=fp)
     print("%cSite Altitude =   %5.0lf,  site temp = %.1lf F" % (
            CH1, results.site_alt * M2FT, ((results.base_temp - 273.15) * 9 / 5) + 32), file=fp)
     print("%cBarometer     =   %.2f,  air density = %.4lf,  Mach vel  = %.1lf" % (

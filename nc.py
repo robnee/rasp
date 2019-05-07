@@ -202,9 +202,8 @@ def to_da_moon_alice(rkt):
     else:
         flight.baro_press = rasp.standard_press(rkt.site_alt)
 
-    flight.rocket = rasp.Rocket()
+    rocket = flight.rocket = rasp.Rocket()
 
-    rocket = flight.rocket
     rocket.nose = rasp.find_nose(rkt.nosetype)
 
     for i, stg in enumerate(rocket.stages):
