@@ -166,8 +166,7 @@ class Rocket:
     def __init__(self, name=None):
         self.name = name
         self.nose = None
-        self.stages = []
-        self.stages.append(Stage())
+        self.stages = [Stage()]
 
 
 class Flight:
@@ -179,7 +178,6 @@ class Flight:
         self.e_info = None  #
 
         self.verbose = False
-        self.rocketwt = 0.0
         self.base_temp = 0.0
         self.faren_temp = 0.0
         self.site_alt = 0.0
@@ -188,6 +186,15 @@ class Flight:
         self.coast_base = 0.0
 
         self.temp_correction = False
+
+    def rocket_wt(self):
+        # sum the result of stage_wt for each stage number
+        return sum(map(self.stage_wt, range(len(self.rocket.stages))))
+
+    def stage_wt(self, num):
+        # todo: num is zero-based
+        stage = self.rocket.stages[num]
+        return stage.weight + self.e_info[num].wt * stage.engnum
 
 
 class Results:
@@ -259,49 +266,9 @@ struct nose_cone {
     int       form ;    /* M,C&B Formula to Apply */
 };
 
-#define RASP_BUF_LEN    1024
-#define RASP_FILE_LEN   PATH_MAX + NAME_MAX + 2    /* from pathproc.h v4.1 */
-
-struct motor_entry {
-   char MEnt [ RASP_BUF_LEN + 1 ] ;
-} ;
-
-
-# Define the 1st character on non-data output lines. This forces
-# output to be gnuplot compatible.
-#ifdef VMS
-   char ch1 = '!';
-#else
-   char ch1 = '#';
-#endif
-
-   /*
-    * Global Variables
-    */
-
-   char FloatChars [] = { "0123456789.EeFfGg+-" };
-
    int nexteng,      /* next free engine index */
        destnum,      /* index into array of devices for output - dest */
        stagenum;     /* number of stages */
-
-   char Mcode [ RASP_BUF_LEN + 1 ];  /* array to hold engine code */
-
-   char rname [ RASP_BUF_LEN + 1 ];  /* rocket name */
-   char oname [ RASP_BUF_LEN + 1 ];  /* old rocket name */
-   char bname [ RASP_FILE_LEN + 1 ]; /* output file base name for simulation */
-   char fname [ RASP_FILE_LEN + 1 ]; /* output file name for simulation */
-   char ename [ RASP_FILE_LEN + 1 ]; /* Holds Motor File Name */
-
-   char PrgName [ RASP_FILE_LEN + 1 ];  /* v4.1 -- program Name */
-   char EngHome [ RASP_FILE_LEN + 1 ];  /* v4.1 -- Engine  Home */
-   char * RaspHome ;                    /* v4.1 -- getenv ( "RASPHOME" ) */
-
-   FILE *stream,  *efile;
-
-   int verbose;
-
-   char DELIM [] = {" ,()" };
 
 """
 
@@ -334,6 +301,10 @@ def get_float(prompt, default):
             return float(entry)
         except ValueError:
             print("Bad Value")
+
+
+def standard_press(alt):
+    return STD_ATM * math.exp(5.256 * math.log(1 - (0.00000688 * alt * M2FT)))
 
 
 def choices(defaults):
@@ -427,12 +398,6 @@ def choices(defaults):
         stage.end_burn = stage.start_burn + flight.e_info[num].t2
         stage.end_stage = stage.end_burn + stage_delay
  
-        # figure weight for stage and total rocket
- 
-        stage.totalw = stage.weight + flight.e_info[num].wt * stage.engnum
- 
-        flight.rocketwt += stage.totalw
-
     # Environmental Data
     flight.site_alt = get_float("Launch Site Altitude in Feet", defaults.site_alt * M2FT) / M2FT
  
@@ -440,8 +405,7 @@ def choices(defaults):
  
     flight.base_temp = (flight.faren_temp - 32) * 5 / 9 + 273.15  # convert to degK
  
-    baro_press = 1 - (0.00000688 * flight.site_alt * M2FT)
-    baro_press = STD_ATM * math.exp(5.256 * math.log(baro_press))
+    baro_press = standard_press(flight.site_alt)
     flight.baro_press = get_float("Barometric Pressure at Launch Site", baro_press)
  
     flight.rod = get_float("Launch Rod Length ( inch )", defaults.rod / IN2M) * IN2M
@@ -480,10 +444,7 @@ def calc(flight):
     burn_time = 0.0                   # Elapsed time for motor burn
     stage_diam = 0.0                  # max diam at current time
     drag_coff = 0.0                   # max cd for all stages
-    vel = 0.0                         # Velocity
-    alt = LAUNCHALT                   # Altitude
 
-    t = 0.000000
     drag = 0.0                        # kjh added to print Drag in Nt
 
     old_vel = 0.0                     # kjh added to avg vel in interval
@@ -506,10 +467,7 @@ def calc(flight):
     # rho == Air Density for drag calc
     results.rho_0 = (flight.baro_press * IN2PASCAL) / (GAS_CONST_AIR * flight.base_temp)
 
-    mass = flight.rocketwt
-
-#  for ( j=0 ; j < stagenum ; j++ )
-#     fprintf ( stream, "%cStage Weight [%d]:  %9.4f\n", ch1, j, stages[j].totalw );
+    mass = flight.rocket_wt()
 
     # What is the effective Diameter and drag coeff
     prev_stage = None
@@ -526,8 +484,11 @@ def calc(flight):
     # c = r * drag_constant
 
     # kjh wants to see thrust at t=0 if there is any ...
+    # Todo: this was part of a print routine.  It's a kludge that prints a value for
+    #       time = 0.  We should just capture all the values instead
 
     accel = 0.0
+    # Todo: thrust odd/even is not longer valid
     if flight.e_info[0].thrust[0] == 0.0:       # .thrust [ evens ] = Time
         thrust = flight.e_info[0].thrust[1]     # .thrust [ odds ] = Thrust
 
@@ -536,7 +497,13 @@ def calc(flight):
         else:
             accel = 0.0
 
+    # T0
+    # todo: finish list setup
+    results.tee = [0.0]
+    results.alt = [LAUNCHALT]
+
     # Launch Loop
+    t = 0.000000
     while True:
         # Calculate decreasing air density
 
@@ -569,13 +536,13 @@ def calc(flight):
         stage_time += DELTA_T
 
         # handle staging, if needed
-        if (t > stages[this_stage].end_stage) and (this_stage < stagenum-1):
+        if (t > stages[this_stage].end_stage) and (this_stage < stagenum - 1):
             thrust_index = 0
             old_thrust = 0.0
             sum_o_thrust = 0.0
             old_time = 0.0
 
-            stage_wt = flight.rocket.stages[this_stage].totalw
+            stage_wt = flight.stage_wt(this_stage)
             # mass = rocketwt - stage_wt
             # TODO: this implies modifying flight which we shouldn't do
             rocketwt -= stage_wt  # kjh 95-10-29
@@ -591,11 +558,11 @@ def calc(flight):
                 drag_coff = stages[j].cd  # kjh Added This
 
                 if j > this_stage:
-                    if stage_diam < stages[j-1].maxd:
-                        stage_diam = stages[j-1].maxd
+                    if stage_diam < stages[j - 1].maxd:
+                        stage_diam = stages[j - 1].maxd
 
-                    if drag_coff < stages[j-1].cd:  # kjh added this too
-                        drag_coff = stages[j-1].cd
+                    if drag_coff < stages[j - 1].cd:  # kjh added this too
+                        drag_coff = stages[j - 1].cd
 
             """
                  1
@@ -621,7 +588,7 @@ def calc(flight):
             c = r * drag_constant
 
             # TODO: move this
-            fprintf(stream, "%cStage %d Ignition at %5.2f sec.\n", ch1, this_stage+1, t)
+            results.stage_ignition.append(t)
 
         # Handle the powered phase of the boost
         if stages[this_stage].start_burn <= t <= stages[this_stage].end_burn:
@@ -631,19 +598,19 @@ def calc(flight):
             # see if we need to use the next thrust point
             # All times are relative to burn time for these calculations
 
-            if burn_time > e_info[stage_engcnum].thrust[thrust_index]:
-                old_time = e_info[stage_engcnum].thrust[thrust_index]
+            if burn_time > flight.e_info[stage_engcnum].thrust[thrust_index]:
+                old_time = flight.e_info[stage_engcnum].thrust[thrust_index]
 
                 thrust_index += 1
 
-                old_thrust = e_info[stage_engcnum].thrust[thrust_index]
+                old_thrust = flight.e_info[stage_engcnum].thrust[thrust_index]
 
                 thrust_index += 1
 
             # Logic to smooth transision between thrust points.
             # Transisions are linear rather than discontinuous.
 
-            thrust = e_info[stage_engcnum].thrust[thrust_index + 1] - old_thrust
+            thrust = flight.e_info[stage_engcnum].thrust[thrust_index + 1] - old_thrust
 
             thrust *= (burn_time - old_time) / (e_info[stage_engcnum].thrust[thrust_index] - old_time)
 
@@ -777,7 +744,7 @@ def dump_header(fp, flight):
     print("%c Rocket Name: %s" % (CH1, flight.rname), file=fp)
     print("%c Motor File:  %s" % (CH1, flight.ename), file=fp)
 
-    wt = flight.rocketwt
+    wt = flight.rocket_wt()
     for i, stage in enumerate(flight.rocket.stages):
         print(CH1, file=fp)
         print("%c%5s  %-16s  %8s  %8s  %8s  %9s" % (
@@ -793,11 +760,11 @@ def dump_header(fp, flight):
 
         print("%c%5d  (%1d) %-12s  %8.2f  %8.2f  %8.3f  %9.3f  %5.3f" % (
           CH1, i + 1, stage.engnum, flight.e_info[i].code,
-          stage.weight / OZ2KG, flight.rocketwt / OZ2KG, stage.maxd,
+          stage.weight / OZ2KG, flight.rocket_wt() / OZ2KG, stage.maxd,
           stage.maxd + math.sqrt(stage.fins.area / (IN2M * IN2M * math.pi)) / 2,
           stage.cd), file=fp)
 
-        wt -= stage.weight + flight.e_info[i].wt * stage.engnum
+        wt -= flight.stage_wt(i)
 
         raspinfo.print_engine_info(flight.e_info[i])
 
@@ -814,6 +781,11 @@ def dump_header(fp, flight):
             "-----------", "---------", "---------"), file=fp)
 
 
+def display_flight(flight, fp)
+#    for ( j=0 ; j < stagenum ; j++ )
+    #     fprintf ( stream, "%cStage Weight [%d]:  %9.4f\n", ch1, j, stages[j].totalw );
+
+
 def display_results(results, fp):
     for i, tee in enumerate(results.tee):
         if i % 10 == 0:
@@ -826,6 +798,9 @@ def display_results(results, fp):
                 print(" %4.1lf %10.1lf %10.1lf %10.1lf %11.2lf %10.3lf %10.3lf" % (
                       tee, print_alt, print_vel, print_accel,
                       print_mass, results.thrust[i], results.drag[i]), file=fp)
+
+    # TODO: add this
+    # fprintf(stream, "%cStage %d Ignition at %5.2f sec.\n", ch1, this_stage + 1, t)
 
     print(CH1, file=fp)
     print("%cMaximum altitude attained = %.1lf feet (%.1lf meters)" % (
@@ -890,8 +865,6 @@ def main():
     defaults.site_alt = LAUNCHALT / M2FT
     defaults.baro_press = STD_ATM
     defaults.rod = ROD
-    defaults.rocketwt = 0
-    defaults.nexteng = 0
 
     # this is the batch mode block ( see n.c )
     if args.raspfiles:

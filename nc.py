@@ -198,13 +198,9 @@ def to_da_moon_alice(rkt):
     flight.rod = rkt.raillength
 
     if rkt.sitepress:
-        baro_press = rkt.sitepress / rasp.IN2PASCAL
+        flight.baro_press = rkt.sitepress / rasp.IN2PASCAL
     else:
-        baro_press = 1 - (0.00000688 * rkt.site_alt * rasp.M2FT)
-        baro_press = rasp.STD_ATM * math.exp(5.256 * math.log(baro_press))
-
-    flight.mach1_0 = math.sqrt(rasp.MACH_CONST * rkt.sitetemp)
-    flight.rho_0 = (baro_press * rasp.IN2PASCAL) / (rasp.GAS_CONST_AIR * rkt.sitetemp)
+        flight.baro_press = rasp.standard_press(rkt.site_alt)
 
     flight.rocket = rasp.Rocket()
 
@@ -233,11 +229,6 @@ def to_da_moon_alice(rkt):
             stage.start_burn = rocket.stages[i - 1].end_stage
         stage.end_burn = stage.start_burn + flight.e_info[i].t2
         stage.end_stage = stage.end_burn + stage.stagedelay
-
-        # TODO: This logic should be handled in calc
-        # stage.totalw = stage.weight + (e_info[stages[i].engcnum].wt * stages[i].engnum);
-  
-        flight.rocketwt += stage.weight + (flight.e_info[i].wt * stage.engnum)
 
     print("Launching", flight.rname)
 
