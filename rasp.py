@@ -151,9 +151,6 @@ class Fins:
 class Stage:
     def __init__(self):
         self.engnum = 1      # number of engines in stage
-        self.start_burn = 0  # Start of engine (includes previous stage)
-        self.end_burn = 0    # End of engine burn  (includes previous stage)
-        self.end_stage = 0   # End of stage (includes previous stage)
         self.drop_stage = 0  # When stage is dropped (includes previous stage)
         self.weight = 0      # stage wt w/o engine
         self.maxd = 0        # max diameter of stage
@@ -221,6 +218,11 @@ class Results:
         self.vcoff = 0.00
         self.acoff = 0.00
         self.tcoff = 0.00        # kjh added for cutoff data
+
+        self.events = []
+        self.start_burn = 0  # Start of engine (includes previous stage)
+        self.end_burn = 0    # End of engine burn  (includes previous stage)
+        self.end_stage = 0   # End of stage (includes previous stage)
 
 
 """
@@ -384,20 +386,10 @@ def choices(defaults):
  
         if num + 1 < stagenum:
             prompt = f"Staging Delay for Stage {num + 2} in Seconds"
-            stage_delay = get_float(prompt, defaults.rocket.stage_delay)
+            stage.stage_delay = get_float(prompt, defaults.rocket.stage_delay)
         else:
-            stage_delay = 0
+            stage.stage_delay = 0
 
-        # figure start and stop times for motor burn  and stage
- 
-        if num == 0:
-            stage.start_burn = 0
-        else:
-            stage.start_burn = rocket.stages[num - 1].end_stage
- 
-        stage.end_burn = stage.start_burn + flight.e_info[num].t2
-        stage.end_stage = stage.end_burn + stage_delay
- 
     # Environmental Data
     flight.site_alt = get_float("Launch Site Altitude in Feet", defaults.site_alt * M2FT) / M2FT
  
@@ -445,8 +437,8 @@ def calc(flight):
     drag_coff = 0.0                   # max cd for all stages
     drag = 0.0                        # kjh added to print Drag in Nt
     sum_o_thrust = 0.0                # kjh added to reduce pro mass ~ thrust
-    old_thrust = 0.0                  # last engine thrust  from table
-    old_time = 0.0                    # last engine thrust time  from table
+    old_thrust = 0.0                  # last engine thrust from table
+    old_time = 0.0                    # last engine thrust time from table
     launched = 0                      # indicates rocket has lifted off
     coast_time = 0.00                 # kjh to coast after burnout
 
@@ -491,7 +483,7 @@ def calc(flight):
         # Calculate decreasing air density
 
         # todo: r = air_density (alt,site_alt,base_temp);
-        y = alt[-1]
+        y = results.alt[-1]
         if y > SPACEALT:
             r = 0
         elif y > MAXALT:
@@ -505,12 +497,22 @@ def calc(flight):
             results.mach1_0 = math.sqrt(MACH_CONST * dt)
 
         d = stage_diam * IN2M
-        drag_constant = 0.5 * drag_coff * ((math.pi * d * d * 0.25) + flight.rocket.fins[this_stage].area)
+        drag_constant = 0.5 * drag_coff * ((math.pi * d * d * 0.25) + flight.rocket. x fins[this_stage].area)
 
         c = r * drag_constant
 
         t += DELTA_T
         stage_time += DELTA_T
+
+        # figure start and stop times for motor burn and stage
+
+        if num == 0:
+            stage.start_burn = 0
+        else:
+            stage.start_burn = rocket.stages[num - 1].end_stage
+
+        stage.end_burn = stage.start_burn + flight.e_info[num].t2
+        stage.end_stage = stage.end_burn + stage_delay
 
         # handle staging, if needed
         if (t > stages[this_stage].end_stage) and (this_stage < stagenum - 1):

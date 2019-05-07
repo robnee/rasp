@@ -224,11 +224,6 @@ def to_da_moon_alice(rkt):
         stage.fins.area = stage.fins.num * stage.fins.thickness * rasp.IN2M \
             * stage.fins.span * rasp.IN2M
 
-        if i > 0:
-            stage.start_burn = rocket.stages[i - 1].end_stage
-        stage.end_burn = stage.start_burn + flight.e_info[i].t2
-        stage.end_stage = stage.end_burn + stage.stagedelay
-
     print("Launching", flight.rname)
 
     fname = None
