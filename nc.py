@@ -211,18 +211,16 @@ def to_da_moon_alice(rkt):
 
         rocket.stages.append(rasp.Stage())
         stage = rocket.stages[-1]
+        stage.number = i + 1
         stage.engnum = stg.nummotor
         stage.weight = stg.drymass
         stage.maxd = stg.diameter / rasp.IN2M
         stage.cd = stg.cd
 
-        # TODO: why are span and area in diff units?
         stage.fins = rasp.Fins()
         stage.fins.num = stg.numfins
         stage.fins.thickness = stg.finthickness / rasp.IN2M
         stage.fins.span = stg.finspan / rasp.IN2M
-        stage.fins.area = stage.fins.num * stage.fins.thickness * rasp.IN2M \
-            * stage.fins.span * rasp.IN2M
 
     print("Launching", flight.rname)
 

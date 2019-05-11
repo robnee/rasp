@@ -79,6 +79,51 @@ Definitions moved to rasp.h by kjh June, 1995
          Changed functions in pathproc.c to require a target buffer length
          in order to eliminate buffer overflows.
          Rev 4.2 -- Konrad J. Hambrick (konrad@netcom.com konrad@kjh-com.com)
+
+/* kjh added this structure to make engine processing faster    */
+/* what we're gonna do is:  when the engine file is referenced, */
+/* open the file, read , ftell () and look for valid lines,     */
+/* of a valid line is found, save ftell () in motor.offset.     */
+/*                                                              */
+/* When a particular motor is referenced, search this list then */
+/* when found, use fseek() to jump forward to the header line.  */
+/*                                                              */
+/* Saved for later ...                                          */
+
+struct motor {
+    char  code[32];        /* engine name                                  */
+    int   dia;             /* engine diameter    (millimeters)             */
+    int   len;             /* engine length      (millimeters)             */
+    char  delay[32];       /* ejection delays available raw string data    */
+    double  pmass ;        /* pro mass                                     */
+    double  mmass ;        /* pro mass                                     */
+    char  mfg[32];         /* manufacturer info                            */
+    unsigned long offset ; /* byte index into .eng file                    */
+};
+
+struct engine {
+    double t2;             /* thrust duration    (seconds)                 */
+    double m2;             /* propellant wt.     (kilograms)               */
+    double wt;             /* initial engine wt. (kilograms)               */
+    double thrust[MAXT];   /* thrust curve     (Time-sec,Thrust-Newtons)   */
+    double navg;           /* average thrust     (newtons)                 */
+    double ntot;           /* total impulse      (newton-seconds)          */
+    double npeak;          /* peak thrust        (newtons)                 */
+    int   dia;             /* engine diameter    (millimeters)             */
+    int   len;             /* engine length      (millimeters)             */
+    int   delay[8];        /* ejection delays available (sec)              */
+    char  mfg[32];         /* manufacturer info                            */
+    char  code[32];        /* engine name                                  */
+};
+
+struct nose_cone {
+    char    * name ;    /* Verbose Nose Cone Name */
+    int       form ;    /* M,C&B Formula to Apply */
+};
+
+   int nexteng,      /* next free engine index */
+       destnum,      /* index into array of devices for output - dest */
+       stagenum;     /* number of stages */
 """
 
 import os
@@ -89,6 +134,7 @@ import nc
 import argparse
 import raspinfo
 import pathproc
+from collections import defaultdict
 
 VERSION = "4.1b"
 
@@ -145,18 +191,21 @@ class Fins:
         self.num = 0         # Number of Fins / Stage
         self.thickness = 0   # Max Thickness of Fin Stock
         self.span = 0        # Max Span of Fins from BT
-        self.area = 0        # Computed Once to run faster
+    
+    def area(self):
+        return self.fins.num * self.fins.thickness * IN2M * self.fins.span * IN2M
 
 
 class Stage:
     def __init__(self):
+        self.number = 1      # stage number from boosters to sustainer
         self.engnum = 1      # number of engines in stage
         self.drop_stage = 0  # When stage is dropped (includes previous stage)
         self.weight = 0      # stage wt w/o engine
         self.maxd = 0        # max diameter of stage
         self.cd = 0          # kjh added cd per stage
         self.fins = Fins()
-        self.o_wt = 0        # kjh added to remember weight run-to-run
+        self.stage_delay = 0
 
 
 class Rocket:
@@ -165,6 +214,12 @@ class Rocket:
         self.nose = None
         self.stages = [Stage()]
 
+    def maxd(self, first=0):
+        return max(s.maxd for s in self.stages[first:])
+    
+    def cd(self, first=0):
+        return max(s.cd for s in self.stages[first:])
+
 
 class Flight:
     def __init__(self):
@@ -172,7 +227,7 @@ class Flight:
         self.fname = None
         self.rname = None
         self.ename = None
-        self.e_info = None  #
+        self.e_info = None
 
         self.verbose = False
         self.base_temp = 0.0
@@ -219,60 +274,11 @@ class Results:
         self.acoff = 0.00
         self.tcoff = 0.00        # kjh added for cutoff data
 
+        # how to keep the per-stage stats?
         self.events = []
         self.start_burn = 0  # Start of engine (includes previous stage)
         self.end_burn = 0    # End of engine burn  (includes previous stage)
         self.end_stage = 0   # End of stage (includes previous stage)
-
-
-"""
-
-/* kjh added this structure to make engine processing faster    */
-/* what we're gonna do is:  when the engine file is referenced, */
-/* open the file, read , ftell () and look for valid lines,     */
-/* of a valid line is found, save ftell () in motor.offset.     */
-/*                                                              */
-/* When a particular motor is referenced, search this list then */
-/* when found, use fseek() to jump forward to the header line.  */
-/*                                                              */
-/* Saved for later ...                                          */
-
-struct motor {
-    char  code[32];        /* engine name                                  */
-    int   dia;             /* engine diameter    (millimeters)             */
-    int   len;             /* engine length      (millimeters)             */
-    char  delay[32];       /* ejection delays available raw string data    */
-    double  pmass ;        /* pro mass                                     */
-    double  mmass ;        /* pro mass                                     */
-    char  mfg[32];         /* manufacturer info                            */
-    unsigned long offset ; /* byte index into .eng file                    */
-};
-
-struct engine {
-    double t2;             /* thrust duration    (seconds)                 */
-    double m2;             /* propellant wt.     (kilograms)               */
-    double wt;             /* initial engine wt. (kilograms)               */
-    double thrust[MAXT];   /* thrust curve     (Time-sec,Thrust-Newtons)   */
-    double navg;           /* average thrust     (newtons)                 */
-    double ntot;           /* total impulse      (newton-seconds)          */
-    double npeak;          /* peak thrust        (newtons)                 */
-    int   dia;             /* engine diameter    (millimeters)             */
-    int   len;             /* engine length      (millimeters)             */
-    int   delay[8];        /* ejection delays available (sec)              */
-    char  mfg[32];         /* manufacturer info                            */
-    char  code[32];        /* engine name                                  */
-};
-
-struct nose_cone {
-    char    * name ;    /* Verbose Nose Cone Name */
-    int       form ;    /* M,C&B Formula to Apply */
-};
-
-   int nexteng,      /* next free engine index */
-       destnum,      /* index into array of devices for output - dest */
-       stagenum;     /* number of stages */
-
-"""
 
 
 def get_str(prompt, default):
@@ -312,42 +318,40 @@ def standard_press(alt):
 def choices(defaults):
     flight = Flight()
 
-    flight.rname = get_str("Rocket Name", defaults.rname)
+    flight.rname = get_str("Rocket Name", defaults['rname'])
  
     stagenum = get_int("Number of Stages", 1)
 
     flight.rocket = rocket = Rocket()
 
     for num in range(stagenum):
-        flight.e_info.append(raspinfo.get_motor(defaults.ename))
+        flight.e_info.append(raspinfo.get_motor(defaults['ename']))
 
         stage = Stage()
         rocket.stages.append(stage)
+        stage.number = num + 1
 
         prompt = f"Number of engines" + f" in Stage {num + 1}" if num > 0 else ""
 
-        stage.engnum = get_int(prompt + prompt, defaults.rocket.stages[0].engnum)
+        stage.engnum = get_int(prompt, defaults['engnum'])
  
         if num == 0:
             rocket.nose = get_nose("Nose (<O>give,<C>onic,<E>lliptic,<P>arabolic,<B>lunt)",
-                                   defaults.rocket.nose)
+                                   defaults['nose'])
         if stagenum > 1:
             prompt = f"Weight of Stage {num + 1} w/o Engine in Ounces"
         else:
             prompt = f"Weight of Rocket w/o Engine in Ounces"
 
         # Remember the weight from run to run
-        defaults.rocket.stages[num].o_wt = get_float(prompt, defaults.rocket.stages[num].o_wt)
- 
-        stage.weight = defaults.rocket.stages[num].o_wt * OZ2KG
-        stage.engnum = 1  # of engines in stage
+        stage.weight = get_float(prompt)
 
         if stagenum > 1:
             prompt = f"Maximum Diameter of Stage {num + 1} in Inches"
         else:
             prompt = f"Maximum Body Diameter in Inches"
  
-        stage.maxd = get_float(prompt, defaults.rocket.stages[0].maxd)
+        stage.maxd = get_float(prompt, defaults['maxd'])
  
         if stagenum > 1:
             prompt = f"Number of Fins on Stage {num + 1}"
@@ -355,7 +359,7 @@ def choices(defaults):
             prompt = f"Number of Fins"
 
         fins = stage.fins = Fins()
-        fins.num = get_int(prompt, defaults.rocket.stages[0].fins.num)
+        fins.num = get_int(prompt, defaults['fins_num'])
  
         if fins.num == 0:
             fins.thickness = 0.0
@@ -366,43 +370,41 @@ def choices(defaults):
             else:
                 prompt = f"Max Thickness of Fins (Inches) "
  
-            fins.thickness = get_float(prompt, defaults.rocket.stages[0].fins.thickness)
+            fins.thickness = get_float(prompt, defaults['fins_thickness'])
  
             if stagenum > 1:
                 prompt = f"Max Span of Fins on Stage {num + 1} (Inches -- From BT, Out) "
             else:
                 prompt = f"Max Span of Fins (Inches -- From BT, Out) "
 
-            fins.span = get_float(prompt, defaults.rocket.stages[0].fins.span)
-
-        fins.area = fins.num * fins.thickness * fins.span * IN2M * IN2M
+            fins.span = get_float(prompt, defaults['fins_span'])
 
         if stagenum > 1:
             prompt = f"Drag Coefficient of Rocket From Stage {num + 1}, Up "
         else:
             prompt = f"Drag Coefficient "
 
-        stage.cd = get_float(prompt, defaults.rocket.stages[0].cd)
+        stage.cd = get_float(prompt, defaults['cd'])
  
         if num + 1 < stagenum:
             prompt = f"Staging Delay for Stage {num + 2} in Seconds"
-            stage.stage_delay = get_float(prompt, defaults.rocket.stage_delay)
+            stage.stage_delay = get_float(prompt, defaults['stage_delay'])
         else:
             stage.stage_delay = 0
 
     # Environmental Data
-    flight.site_alt = get_float("Launch Site Altitude in Feet", defaults.site_alt * M2FT) / M2FT
+    flight.site_alt = get_float("Launch Site Altitude in Feet", defaults['site_alt'] * M2FT) / M2FT
  
-    flight.faren_temp = get_float("Air Temp in DegF", defaults.faren_temp)
+    flight.faren_temp = get_float("Air Temp in DegF", defaults['faren_temp'])
  
     flight.base_temp = (flight.faren_temp - 32) * 5 / 9 + 273.15  # convert to degK
  
     baro_press = standard_press(flight.site_alt)
     flight.baro_press = get_float("Barometric Pressure at Launch Site", baro_press)
  
-    flight.rod = get_float("Launch Rod Length ( inch )", defaults.rod / IN2M) * IN2M
+    flight.rod = get_float("Launch Rod Length ( inch )", defaults['rod'] / IN2M) * IN2M
 
-    flight.coast_base = get_float("Coast Time (Enter 0.00 for Apogee)", defaults.coast_base)
+    flight.coast_base = get_float("Coast Time (Enter 0.00 for Apogee)", defaults['coast_base'])
  
     destnum = get_int("Send Data to:\n\t(1) Screen\n\t(2) Printer\n\t(3) Disk file\nEnter #", 1)
 
@@ -429,19 +431,15 @@ def choices(defaults):
 
 
 def calc(flight):
-    stage_engcnum = 0                 # engcnum for current stage
-    this_stage = 0                    # current stage
     stage_time = 0.0                  # elapsed time for current stage
     #burn_time = 0.0                   # Elapsed time for motor burn
-    stage_diam = 0.0                  # max diam at current time
-    drag_coff = 0.0                   # max cd for all stages
+    coast_time = 0.00                 # kjh to coast after burnout
     drag = 0.0                        # kjh added to print Drag in Nt
     sum_o_thrust = 0.0                # kjh added to reduce pro mass ~ thrust
     old_thrust = 0.0                  # last engine thrust from table
     old_time = 0.0                    # last engine thrust time from table
     launched = 0                      # indicates rocket has lifted off
-    coast_time = 0.00                 # kjh to coast after burnout
-
+    
     results = Results()
 
     results.mach1_0 = math.sqrt(MACH_CONST * flight.base_temp)
@@ -454,26 +452,27 @@ def calc(flight):
 
     mass = flight.rocket_wt()
 
+    stage = flight.rocket.stages[0]
+    engine = flight.e_info[0]
+     
+    # figure start and stop times for motor burn and stage
+    start_burn = 0
+    end_burn = engine.t2
+    end_stage = end_burn + stage.stage_delay
+
     # What is the effective Diameter and drag coeff
-    prev_stage = None
-    for stage in flight.rocket.stages:
-        if prev_stage:
-            stage_diam = max(stage_diam, prev_stage.maxd)
-            drag_coff = max(drag_coff, prev_stage.cd)
-        else:
-            stage_diam = stage.maxd
-            drag_coff = stage.cd
-
+    stage_diam = flight.rocket.maxd()
+    drag_coff = flight.rocket.cd()
+        
     # c = r * M_PI * drag_coff * d * d * 0.125;
-
     # c = r * drag_constant
 
     # kjh wants to see thrust at t=0 if there is any ...
     results.tee = [0.0]
     results.alt = [LAUNCHALT]
     results.acc = [0.0]
-    if flight.e_info[0].thrust[0] == 0.0:       # .thrust[0] = Time
-        thrust = flight.e_info[0].thrust[1]     # .thrust[1] = Thrust
+    if engine.thrust[0] == 0.0:       # .thrust[0] = Time
+        thrust = engine.thrust[1]     # .thrust[1] = Thrust
         if thrust != 0.0:
             results.acc = [(thrust - drag) / mass - G]
   
@@ -496,49 +495,37 @@ def calc(flight):
             dt = isa_temp(flight.base_temp, y)
             results.mach1_0 = math.sqrt(MACH_CONST * dt)
 
+        # is this a result?
         d = stage_diam * IN2M
-        drag_constant = 0.5 * drag_coff * ((math.pi * d * d * 0.25) + flight.rocket. x fins[this_stage].area)
+        drag_constant = 0.5 * drag_coff * ((math.pi * d * d * 0.25) + stage.fins.area())
 
         c = r * drag_constant
 
         t += DELTA_T
         stage_time += DELTA_T
 
-        # figure start and stop times for motor burn and stage
-
-        if num == 0:
-            stage.start_burn = 0
-        else:
-            stage.start_burn = rocket.stages[num - 1].end_stage
-
-        stage.end_burn = stage.start_burn + flight.e_info[num].t2
-        stage.end_stage = stage.end_burn + stage_delay
-
         # handle staging, if needed
-        if (t > stages[this_stage].end_stage) and (this_stage < stagenum - 1):
+        if t > end_stage and stage.number < len(flight.rocket.stages):
             thrust_index = 0
             old_thrust = 0.0
             sum_o_thrust = 0.0
             old_time = 0.0
 
-            stage_wt = flight.stage_wt(this_stage)
+            # this gets the next stage due to offset between number and index
+            stage = flight.rocket.stages[stage.number]
+            engine = flight.e_info[stage.number]
+            
+            stage_wt = flight.stage_wt(stage.number - 1)
             mass -= stage_wt
 
-            this_stage += 1
-
-            stage_engcnum = stages[this_stage].engcnum
             stage_time = burn_time = 0
+            start_burn = t
+            end_burn = start_burn + engine.t2
+            end_stage = end_burn + stage.stage_delay
 
-            for (j = this_stage; j < stagenum; j++):
-                stage_diam = stages[j].maxd
-                drag_coff = stages[j].cd  # kjh Added This
-
-                if j > this_stage:
-                    if stage_diam < stages[j - 1].maxd:
-                        stage_diam = stages[j - 1].maxd
-
-                    if drag_coff < stages[j - 1].cd:  # kjh added this too
-                        drag_coff = stages[j - 1].cd
+            # What is the effective Diameter and drag coeff of remaining stages
+            stage_diam = flight.rocket.maxd(stage.number - 1)
+            drag_coff = flight.rocket.cd(stage.number - 1)
 
             """
                  1
@@ -559,45 +546,39 @@ def calc(flight):
             # c = r * M_PI * drag_coff * d * d * 0.125
 
             d = stage_diam * IN2M
-            drag_constant = 0.5 * drag_coff * ((math.pi * d * d * 0.25) + fins[this_stage].area)
+            drag_constant = 0.5 * drag_coff * ((math.pi * d * d * 0.25) + stage.fins.area())
 
             c = r * drag_constant
 
-            # TODO: move this
-            results.stage_ignition.append(t)
+            # TODO: move this to an event
+            results.events.append((t, f"Stage {stage.number} ignition"))
 
         # Handle the powered phase of the boost
-        if stages[this_stage].start_burn <= t <= stages[this_stage].end_burn:
+        if start_burn <= t <= end_burn:
             burn_time += DELTA_T  # add to burn time
 
             # see if we need to use the next thrust point
             # All times are relative to burn time for these calculations
-            if burn_time > flight.e_info[stage_engcnum].thrust[thrust_index][0]:
-                old_time = flight.e_info[stage_engcnum].thrust[thrust_index][0]
-                old_thrust = flight.e_info[stage_engcnum].thrust[thrust_index][1]
+            if burn_time > engine.thrust[thrust_index][0]:
+                old_time = engine.thrust[thrust_index][0]
+                old_thrust = engine.thrust[thrust_index][1]
                 thrust_index += 1
 
             # Logic to smooth transision between thrust points.
             # Transisions are linear rather than discontinuous
-            thrust = flight.e_info[stage_engcnum].thrust[thrust_index + 1] - old_thrust
-
-            thrust *= (burn_time - old_time) / (e_info[stage_engcnum].thrust[thrust_index] - old_time)
-
+            thrust = flight.engine.thrust[thrust_index + 1][1] - old_thrust
+            thrust *= (burn_time - old_time) / (engine.thrust[thrust_index][1] - old_time)
             thrust += old_thrust
-
-            thrust *= stages[this_stage].engnum
+            thrust *= stage.engnum
 
             # kjh changed this to comsume propellant at thrust rate
-
             sum_o_thrust += (thrust * DELTA_T)
-
-            m1 = sum_o_thrust / (e_info[stage_engcnum].ntot * stages[this_stage].engnum)
-
-            m1 *= e_info[stage_engcnum].m2 * stages[this_stage].engnum
+            m1 = sum_o_thrust / (engine.ntot * stage.engnum)
+            m1 *= engine.m2 * stage.engnum
 
             # This is the Original Method
             #
-            # m1 = (e_info[stage_engcnum].m2 / e_info[stage_engcnum].t2) * DELTA_T
+            # m1 = (engine.m2 / engine.t2) * DELTA_T
             # stage_wt -= m1
             # mass = rocketwt -= m1
             #
@@ -607,7 +588,7 @@ def calc(flight):
         else:
             thrust = 0.0
 
-            if results.tcoff == 0.0 and this_stage == (flight.stagenum - 1):
+            if results.tcoff == 0.0 and stage == flight.rocket.stages[-1]:
                 results.vcoff = vel
                 results.acoff = alt
                 results.tcoff = t
@@ -724,9 +705,9 @@ def dump_header(fp, flight):
           "========", "=========", "====="), file=fp)
 
         print("%c%5d  (%1d) %-12s  %8.2f  %8.2f  %8.3f  %9.3f  %5.3f" % (
-          CH1, i + 1, stage.engnum, flight.e_info[i].code,
+          CH1, stage.stage_num, stage.engnum, flight.e_info[i].code,
           stage.weight / OZ2KG, flight.rocket_wt() / OZ2KG, stage.maxd,
-          stage.maxd + math.sqrt(stage.fins.area / (IN2M * IN2M * math.pi)) / 2,
+          stage.maxd + math.sqrt(stage.fins.area() / (IN2M * IN2M * math.pi)) / 2,
           stage.cd), file=fp)
 
         wt -= flight.stage_wt(i)
@@ -746,9 +727,10 @@ def dump_header(fp, flight):
             "-----------", "---------", "---------"), file=fp)
 
 
-def display_flight(flight, fp)
-#    for ( j=0 ; j < stagenum ; j++ )
-    #     fprintf ( stream, "%cStage Weight [%d]:  %9.4f\n", ch1, j, stages[j].totalw );
+def display_flight(flight, fp):
+    # for ( j=0 ; j < stagenum ; j++ )
+    #     fprintf ( stream, "%cStage Weight [%d]:  %9.4f\n", ch1, j, stages[j].totalw )
+    pass
 
 
 def display_results(results, fp):
@@ -825,11 +807,12 @@ def main():
         print("Prog Name = ", prog_name)
         print("Eng File  = ", ename)
 
-    defaults = Flight()
-    defaults.faren_temp = 59
-    defaults.site_alt = LAUNCHALT / M2FT
-    defaults.baro_press = STD_ATM
-    defaults.rod = ROD
+    # default values for choices
+    defaults = defaultdict()
+    defaults['faren_temp'] = 59
+    defaults['site_alt'] = LAUNCHALT / M2FT
+    defaults['baro_press'] = STD_ATM
+    defaults['rod'] = ROD
 
     # this is the batch mode block ( see n.c )
     if args.raspfiles:
