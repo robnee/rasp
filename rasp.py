@@ -193,7 +193,7 @@ class Fins:
         self.span = 0        # Max Span of Fins from BT
     
     def area(self):
-        return self.fins.num * self.fins.thickness * IN2M * self.fins.span * IN2M
+        return self.num * self.thickness * IN2M * self.span * IN2M
 
 
 class Stage:
@@ -241,7 +241,7 @@ class Flight:
 
     def rocket_wt(self):
         # sum the result of stage_wt for each stage number
-        return sum(map(self.stage_wt, range(len(self.rocket.stages))))
+        return sum([self.stage_wt(i) for i in range(len(self.rocket.stages))])
 
     def stage_wt(self, num):
         # todo: num is zero-based
@@ -279,6 +279,9 @@ class Results:
         self.start_burn = 0  # Start of engine (includes previous stage)
         self.end_burn = 0    # End of engine burn  (includes previous stage)
         self.end_stage = 0   # End of stage (includes previous stage)
+
+    def add_event(self, time, desc):
+        self.events.append((time, desc))
 
 
 def get_str(prompt, default):
@@ -344,7 +347,7 @@ def choices(defaults):
             prompt = f"Weight of Rocket w/o Engine in Ounces"
 
         # Remember the weight from run to run
-        stage.weight = get_float(prompt)
+        stage.weight = get_float(prompt, 0)
 
         if stagenum > 1:
             prompt = f"Maximum Diameter of Stage {num + 1} in Inches"
@@ -432,13 +435,17 @@ def choices(defaults):
 
 def calc(flight):
     stage_time = 0.0                  # elapsed time for current stage
-    #burn_time = 0.0                   # Elapsed time for motor burn
+    burn_time = 0.0                   # Elapsed time for motor burn
+    thrust_index = 0                  # index into engine table
+    start_burn = 0
     coast_time = 0.00                 # kjh to coast after burnout
     drag = 0.0                        # kjh added to print Drag in Nt
+    alt = LAUNCHALT
+    vel = 0.0
     sum_o_thrust = 0.0                # kjh added to reduce pro mass ~ thrust
     old_thrust = 0.0                  # last engine thrust from table
     old_time = 0.0                    # last engine thrust time from table
-    launched = 0                      # indicates rocket has lifted off
+    launched = False                  # indicates rocket has lifted off
     
     results = Results()
 
@@ -456,7 +463,6 @@ def calc(flight):
     engine = flight.e_info[0]
      
     # figure start and stop times for motor burn and stage
-    start_burn = 0
     end_burn = engine.t2
     end_stage = end_burn + stage.stage_delay
 
@@ -470,6 +476,7 @@ def calc(flight):
     # kjh wants to see thrust at t=0 if there is any ...
     results.tee = [0.0]
     results.alt = [LAUNCHALT]
+    results.vel = [0.0]
     results.acc = [0.0]
     if engine.thrust[0] == 0.0:       # .thrust[0] = Time
         thrust = engine.thrust[1]     # .thrust[1] = Thrust
@@ -522,6 +529,8 @@ def calc(flight):
             start_burn = t
             end_burn = start_burn + engine.t2
             end_stage = end_burn + stage.stage_delay
+            results.add_event(t, 'start_burn stage {stage.number}')
+            results.add_event(t, 'end_burn stage {stage.number}')
 
             # What is the effective Diameter and drag coeff of remaining stages
             stage_diam = flight.rocket.maxd(stage.number - 1)
@@ -564,14 +573,14 @@ def calc(flight):
                 old_thrust = engine.thrust[thrust_index][1]
                 thrust_index += 1
 
-            # Logic to smooth transision between thrust points.
-            # Transisions are linear rather than discontinuous
+            # Logic to smooth transition between thrust points.
+            # Transitions are linear rather than discontinuous
             thrust = flight.engine.thrust[thrust_index + 1][1] - old_thrust
             thrust *= (burn_time - old_time) / (engine.thrust[thrust_index][1] - old_time)
             thrust += old_thrust
             thrust *= stage.engnum
 
-            # kjh changed this to comsume propellant at thrust rate
+            # kjh changed this to consume propellant at thrust rate
             sum_o_thrust += (thrust * DELTA_T)
             m1 = sum_o_thrust / (engine.ntot * stage.engnum)
             m1 *= engine.m2 * stage.engnum
@@ -589,9 +598,9 @@ def calc(flight):
             thrust = 0.0
 
             if results.tcoff == 0.0 and stage == flight.rocket.stages[-1]:
-                results.vcoff = vel
-                results.acoff = alt
                 results.tcoff = t
+                results.vcoff = results.vel[-1]
+                results.acoff = results.alt[-1]
 
         """
         Crude approximations for MACH 1 Transition.
@@ -603,7 +612,8 @@ def calc(flight):
         a value of 1.5
         """
 
-        results.avg_vel = (old_vel + vel) / 2
+        # average last two vel values
+        results.avg_vel = sum(results.vel[-2:]) / 2
 
         # kjh Added M,C&B Model for TransSonic Region
         results.drag_bias = drag_diverge(flight.rocket.nose, results.mach1_0, vel)
@@ -638,16 +648,19 @@ def calc(flight):
         # drag = - ( cc * vel * vel ) ;
         drag = - (cc * results.avg_vel * results.avg_vel)  # kjh changed this 05-23-96
 
-        # TODO: This should be building a set of results vectors
-        if launched and vel <= 0:
+        if launched and results.vel[-1] <= 0:
             drag = - drag
             accel = (drag / mass) - G  # kjh added this */
         else:
             accel = ((thrust + drag) / mass) - G
 
         vel = vel + accel * DELTA_T
-
         alt = alt + vel * DELTA_T
+
+        results.tee.append(t)
+        results.acc.append(accel)
+        results.vel.append(vel)
+        results.alt.append(alt)
 
         # test for lift-off and apogee
         if vel > 0:
@@ -728,9 +741,8 @@ def dump_header(fp, flight):
 
 
 def display_flight(flight, fp):
-    # for ( j=0 ; j < stagenum ; j++ )
-    #     fprintf ( stream, "%cStage Weight [%d]:  %9.4f\n", ch1, j, stages[j].totalw )
-    pass
+    for stage in range(len(flight.rocket.stages)):
+        print("%cStage Weight [%d]:  %9.4f" % (CH1, stage + 1, flight.totalwt(stage)), file=fp)
 
 
 def display_results(results, fp):

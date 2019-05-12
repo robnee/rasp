@@ -1,0 +1,47 @@
+
+Title          Spock's Johnson with AltAcc at Ocotillo on a Summer Day
+
+   summary
+
+   Units          FPS               # MKS or FPS
+
+#  FinalAlt       0        ft       # AGL    = Alt_Z
+   CoastTime      90       sec      # effectively, crashes it in verbose mode
+
+   SiteTemp       95       F        #        = Temp0
+   SiteAlt        460               # MSL    = Alt0
+#  SitePress      29.92    inHg     #        = Barometer
+
+   RailLength     5        ft       #        = Rod_Length ( change )
+
+   MotorFile      ../rasp.eng                      # = RaspFile
+
+   NoseType       ogive                            # = NoseType
+
+   Destination    file
+
+   Theta          0.00  deg                        # = Theta
+
+   NumStages      1
+
+   Stage 1
+
+   Diameter        2.23    in                      # = Diam
+   NumFin          3                               # = NFin
+   FinThickness    0.125   in                      # = FinT
+   FinSpan         3.35    in                      # = FinS
+
+   DryMass        1.208    Kg                      # = M0
+
+   CD             0.53                             # = Cd
+
+   NumMotors      1                                # = NumMotor
+
+   MotorName      f50                              # = Motor
+   OutFile        vul.f50                         # = OutFile
+   Launch
+
+   MotorName      g40                              # = Motor
+   OutFile        vul.g40                         # = OutFile
+   Launch
+

@@ -2,7 +2,7 @@ import os
 import re
 import sys
 import units
-import math
+import json
 import raspinfo
 import rasp
 
@@ -47,9 +47,11 @@ MNEMONICS = {
       "printcommand": (None, "PRINTCMD", "STRING", None),
 
       "sitealtitude": ("ft", "SITEALT", "DOUBLE", "length"),
+      "sitealt": ("ft", "SITEALT", "DOUBLE", "length"),
       "finalaltitude": ("ft", "FINALALT", "DOUBLE", "length"),
       "coasttime": ("sec", "COASTTIME", "DOUBLE", "time"),
       "sitetemperature": ("F", "SITETEMP", "DOUBLE", "temp"),
+      "sitetemp": ("F", "SITETEMP", "DOUBLE", "temp"),
       "sitepressure": ("inHg", "SITEPRESS", "DOUBLE", "press"),
       "raillength": ("in", "RAILLENGTH", "DOUBLE", "length"),
       "rodlength": ("in", "RAILLENGTH", "DOUBLE", "length"),
@@ -149,26 +151,26 @@ class RocketBat:
 
     def dump(self):
         print("\nRASP Batch Dump\n")
-        print("BatStru->title       = %s", self.title)
-        print("BatStru->units       = %s", self.units)
-        print("BatStru->mode        = %d", self.mode)
-        print("BatStru->home        = %s", "NONE")  # self.home)
-        print("BatStru->dtime,      = %s", str(self.dtime))
-        print("BatStru->printtime   = %s", str(self.printtime))
-        print("BatStru->printcmd    = %s", self.printcmd)
+        print("BatStru->title       = %s" % (self.title))
+        print("BatStru->units       = %s" % (self.units))
+        print("BatStru->mode        = %d" % (self.mode))
+        print("BatStru->home        = %s" % ("NONE"))  # self.home)
+        print("BatStru->dtime,      = %s" % (str(self.dtime)))
+        print("BatStru->printtime   = %s" % (str(self.printtime)))
+        print("BatStru->printcmd    = %s" % (self.printcmd))
         print()
-        print("BatStru->sitealt     = %s", str(self.sitealt))
-        print("BatStru->sitetemp    = %s", str(self.sitetemp))
-        print("BatStru->sitepress   = %s", str(self.sitepress))
-        print("BatStru->raillength  = %s", str(self.raillength))
-        print("BatStru->theta       = %s", str(self.theta.inp))
-        print("BatStru->finalalt    = %s", str(self.finalalt))
-        print("BatStru->coasttime   = %s", str(self.coasttime))
-        print("BatStru->enginefile  = %s", self.enginefile)
-        print("BatStru->destination = %s", self.destination)
-        print("BatStru->outfile     = %s", self.outfile)
-        print("BatStru->nosetype    = %s", self.nosetype)
-        print("BatStru->numstages   = %d", len(self.stages))
+        print("BatStru->sitealt     = %s" % (str(self.sitealt)))
+        print("BatStru->sitetemp    = %s" % (str(self.sitetemp)))
+        print("BatStru->sitepress   = %s" % (str(self.sitepress)))
+        print("BatStru->raillength  = %s" % (str(self.raillength)))
+        print("BatStru->theta       = %s" % (str(self.theta.inp)))
+        print("BatStru->finalalt    = %s" % (str(self.finalalt)))
+        print("BatStru->coasttime   = %s" % (str(self.coasttime)))
+        print("BatStru->enginefile  = %s" % (self.enginefile))
+        print("BatStru->destination = %s" % (self.destination))
+        print("BatStru->outfile     = %s" % (self.outfile))
+        print("BatStru->nosetype    = %s" % (self.nosetype))
+        print("BatStru->numstages   = %d" % (len(self.stages)))
 
         for j, stage in enumerate(self.stages):
             print()
@@ -184,43 +186,61 @@ class RocketBat:
             print("   stagedelay [%d]   = %s" % (j, stage.stagedelay))
             print("   launchmass [%d]   = %s" % (j, stage.launchmass))
 
+    def as_flight(self):
+        flight = rasp.Flight()
+
+        flight.rname = self.title
+        flight.ename = self.enginefile
+        flight.verbose = self.mode > 0
+        flight.site_alt = self.sitealt
+        flight.coast_base = self.coasttime
+        flight.base_temp = self.sitetemp
+        flight.rod = self.raillength
+
+        if self.sitepress:
+            flight.baro_press = self.sitepress / rasp.IN2PASCAL
+        else:
+            flight.baro_press = rasp.standard_press(self.site_alt)
+
+        rocket = flight.rocket = rasp.Rocket()
+
+        rocket.nose = rasp.find_nose(self.nosetype)
+
+        for i, stg in enumerate(rocket.stages):
+            flight.e_info.append(raspinfo.find_motor(stg.motorname))
+
+            rocket.stages.append(rasp.Stage())
+            stage = rocket.stages[-1]
+            stage.number = i + 1
+            stage.engnum = stg.nummotor
+            stage.weight = stg.drymass
+            stage.maxd = stg.diameter / rasp.IN2M
+            stage.cd = stg.cd
+
+            stage.fins = rasp.Fins()
+            stage.fins.num = stg.numfins
+            stage.fins.thickness = stg.finthickness / rasp.IN2M
+            stage.fins.span = stg.finspan / rasp.IN2M
+
+    def export(self):
+        print("TITLE", self.title)
+        print("SUMMARY")
+        print("UNITS", self.units)
+        print()
+        print("SITETEMP", self.sitetemp)
+        print("SITEALT", self.sitealt)
+        print("RAILLENGTH", self.raillength)
+        print("MOTORFILE", self.enginefile)
+        print()
+        print("NOSETYPE", self.nosetype)
+        print("DESTINATION",  self.destination)
+        print("THETA", self.theta)
+        print("NUMSTAGES", len(self.stages))
+
 
 def to_da_moon_alice(rkt):
 
-    flight = rasp.Flight()
-
-    flight.rname = rkt.title
-    flight.ename = rkt.enginefile
-    flight.verbose = rkt.mode > 0
-    flight.site_alt = rkt.sitealt
-    flight.coast_base = rkt.coasttime
-    flight.base_temp = rkt.sitetemp
-    flight.rod = rkt.raillength
-
-    if rkt.sitepress:
-        flight.baro_press = rkt.sitepress / rasp.IN2PASCAL
-    else:
-        flight.baro_press = rasp.standard_press(rkt.site_alt)
-
-    rocket = flight.rocket = rasp.Rocket()
-
-    rocket.nose = rasp.find_nose(rkt.nosetype)
-
-    for i, stg in enumerate(rocket.stages):
-        flight.e_info.append(raspinfo.find_motor(stg.motorname))
-
-        rocket.stages.append(rasp.Stage())
-        stage = rocket.stages[-1]
-        stage.number = i + 1
-        stage.engnum = stg.nummotor
-        stage.weight = stg.drymass
-        stage.maxd = stg.diameter / rasp.IN2M
-        stage.cd = stg.cd
-
-        stage.fins = rasp.Fins()
-        stage.fins.num = stg.numfins
-        stage.fins.thickness = stg.finthickness / rasp.IN2M
-        stage.fins.span = stg.finspan / rasp.IN2M
+    flight = rkt.as_flight()
 
     print("Launching", flight.rname)
 
@@ -260,20 +280,33 @@ def batch_flite(batch_file):
             stage = rasp_bat.stages[0]
 
             for line in fp.readlines():
-                args = line.split()
+                # break up line and filter comments
+                args = []
+                for arg in line.split():
+                    if arg.startswith('#'):
+                        break
+                    args.append(arg)
+
                 if args:
+                    if args[0].lower() not in MNEMONICS:
+                        print('bad line:', line)
+                        continue
+
                     dfu, cmd, typ, measure = MNEMONICS[args[0].lower()]
 
                     itmp, dtmp, stmp = 0, 0.0, ""
                     if cmd == "TITLE":
                         if len(args) > 1:
-                            rasp_bat.title = re.split(r'\s+', line, maxsplit=1)
+                            rasp_bat.title = re.split(r'\s+', line.strip(), maxsplit=1)[1]
+                        continue
                     elif cmd == "LAUNCH":
                         to_da_moon_alice(rasp_bat)
+                        continue
                     elif cmd == "QUIT":
                         return
                     elif cmd == "DUMP":
                         rasp_bat.dump()
+                        break
                     elif typ == "DOUBLE":
                         if len(args) > 2:
                             src_unit = dfu
@@ -361,6 +394,11 @@ def batch_flite(batch_file):
                         stage.motorname = stmp
                     elif cmd == "NUMMOTOR":
                         stage.nummotor = itmp
+                    else:
+                        print("unknown cmd: ", cmd)
+
+            rasp_bat.dump()
+            rasp_bat.export()
 
     except OSError as e:
         print(e.strerror, e.filename)
@@ -369,9 +407,9 @@ def batch_flite(batch_file):
 def main():
     print("\nRASP - Rocket Altitude Simulation Program V%s\n" % VERSION)
 
-    print(sys.argv)
-    if sys.argv:
-        batch_flite(sys.argv)
+    print()
+    if len(sys.argv) > 1:
+        batch_flite(sys.argv[1])
 
 
 if __name__ == '__main__':
