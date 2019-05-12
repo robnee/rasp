@@ -86,8 +86,10 @@ angle_unit = {
     "none": (1.00, "rad"),
     "radians": (1.00, "rad"),
     "rads": (1.00, "rad"),
+    "rad": (1.00, "rad"),
     "degrees": (0.01745329251994, "deg"),
     "degs": (0.01745329251994, "deg"),
+    "deg": (0.01745329251994, "deg"),
     "gradians": (0.01570796326795, "grad"),
     "grads": (0.01570796326795, "grad")
 }
@@ -103,19 +105,19 @@ units_error_tab = [
 def get_unit(unit_type, unit):
     """ look up unit params """
     if unit_type == "temp":
-        return temp_unit[unit]
+        return temp_unit[unit.lower()]
     elif unit_type == "mass":
-        return mass_unit[unit]
+        return mass_unit[unit.lower()]
     elif unit_type == "length":
-        return len_unit[unit]
+        return len_unit[unit.lower()]
     elif unit_type == "time":
-        return time_unit[unit]
+        return time_unit[unit.lower()]
     elif unit_type == "press":
-        return press_unit[unit]
+        return press_unit[unit.lower()]
     elif unit_type == "angle":
-        return angle_unit[unit]
+        return angle_unit[unit.lower()]
     else:
-        return None
+        return 1.0, None
 
 
 def conv_unit(unit_type, val, in_unit, out_unit=None):

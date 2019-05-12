@@ -2,7 +2,6 @@ import os
 import re
 import sys
 import units
-import json
 import raspinfo
 import rasp
 
@@ -63,6 +62,7 @@ MNEMONICS = {
       "stage": (None, "STAGE", "INTEGER", None),
       "stagedelay": ("sec", "STAGEDELAY", "DOUBLE", "time"),
       "diameter": ("in", "DIAMETER", "DOUBLE", "length"),
+      "numfin": (None, "NUMFINS", "INTEGER", None),
       "numfins": (None, "NUMFINS", "INTEGER", None),
       "finthickness": ("in", "FINTHICKNESS", "DOUBLE", "length"),
       "finspan": ("in", "FINSPAN", "DOUBLE", "length"),
@@ -75,11 +75,12 @@ MNEMONICS = {
       "motorname": (None, "MOTORNAME", "STRING", None),
       "enginename": (None, "MOTORNAME", "STRING", None),
       "nummotor": (None, "NUMMOTOR", "INTEGER", None),
+      "nummotors": (None, "NUMMOTOR", "INTEGER", None),
       "numengine": (None, "NUMMOTOR", "INTEGER", None),
       "destination": (None, "DESTINATION", "STRING", None),
       "outfile": (None, "OUTFILE", "FILENAME", None),
       "outputfile": (None, "OUTFILE", "FILENAME", None),
-      "theta": ("deg", "THETA", "DOUBLE" "angle"),
+      "theta": ("deg", "THETA", "DOUBLE", "angle"),
       "launchangle": ("deg", "THETA", "DOUBLE", "angle"),
 }
 
@@ -151,26 +152,26 @@ class RocketBat:
 
     def dump(self):
         print("\nRASP Batch Dump\n")
-        print("BatStru->title       = %s" % (self.title))
-        print("BatStru->units       = %s" % (self.units))
-        print("BatStru->mode        = %d" % (self.mode))
-        print("BatStru->home        = %s" % ("NONE"))  # self.home)
-        print("BatStru->dtime,      = %s" % (str(self.dtime)))
-        print("BatStru->printtime   = %s" % (str(self.printtime)))
-        print("BatStru->printcmd    = %s" % (self.printcmd))
+        print("BatStru->title       = %s" % self.title)
+        print("BatStru->units       = %s" % self.units)
+        print("BatStru->mode        = %d" % self.mode)
+        print("BatStru->home        = %s" % "NONE")  # self.home)
+        print("BatStru->dtime,      = %s" % str(self.dtime))
+        print("BatStru->printtime   = %s" % str(self.printtime))
+        print("BatStru->printcmd    = %s" % self.printcmd)
         print()
-        print("BatStru->sitealt     = %s" % (str(self.sitealt)))
-        print("BatStru->sitetemp    = %s" % (str(self.sitetemp)))
-        print("BatStru->sitepress   = %s" % (str(self.sitepress)))
-        print("BatStru->raillength  = %s" % (str(self.raillength)))
-        print("BatStru->theta       = %s" % (str(self.theta.inp)))
-        print("BatStru->finalalt    = %s" % (str(self.finalalt)))
-        print("BatStru->coasttime   = %s" % (str(self.coasttime)))
-        print("BatStru->enginefile  = %s" % (self.enginefile))
-        print("BatStru->destination = %s" % (self.destination))
-        print("BatStru->outfile     = %s" % (self.outfile))
-        print("BatStru->nosetype    = %s" % (self.nosetype))
-        print("BatStru->numstages   = %d" % (len(self.stages)))
+        print("BatStru->sitealt     = %s" % str(self.sitealt))
+        print("BatStru->sitetemp    = %s" % str(self.sitetemp))
+        print("BatStru->sitepress   = %s" % str(self.sitepress))
+        print("BatStru->raillength  = %s" % str(self.raillength))
+        print("BatStru->theta       = %s" % str(self.theta.inp))
+        print("BatStru->finalalt    = %s" % str(self.finalalt))
+        print("BatStru->coasttime   = %s" % str(self.coasttime))
+        print("BatStru->enginefile  = %s" % self.enginefile)
+        print("BatStru->destination = %s" % self.destination)
+        print("BatStru->outfile     = %s" % self.outfile)
+        print("BatStru->nosetype    = %s" % self.nosetype)
+        print("BatStru->numstages   = %d" % len(self.stages))
 
         for j, stage in enumerate(self.stages):
             print()
@@ -200,7 +201,7 @@ class RocketBat:
         if self.sitepress:
             flight.baro_press = self.sitepress / rasp.IN2PASCAL
         else:
-            flight.baro_press = rasp.standard_press(self.site_alt)
+            flight.baro_press = rasp.standard_press(self.sitealt)
 
         rocket = flight.rocket = rasp.Rocket()
 
@@ -279,7 +280,7 @@ def batch_flite(batch_file):
             rasp_bat = RocketBat()
             stage = rasp_bat.stages[0]
 
-            for line in fp.readlines():
+            for num, line in enumerate(fp.readlines(), start=1):
                 # break up line and filter comments
                 args = []
                 for arg in line.split():
@@ -290,6 +291,9 @@ def batch_flite(batch_file):
                 if args:
                     if args[0].lower() not in MNEMONICS:
                         print('bad line:', line)
+                        continue
+                    if len(MNEMONICS[args[0].lower()]) < 4:
+                        print('short line:', args)
                         continue
 
                     dfu, cmd, typ, measure = MNEMONICS[args[0].lower()]
@@ -309,9 +313,9 @@ def batch_flite(batch_file):
                         break
                     elif typ == "DOUBLE":
                         if len(args) > 2:
-                            src_unit = dfu
-                        else:
                             src_unit = args[2]
+                        else:
+                            src_unit = dfu
 
                         # convert the units to SI
                         dtmp = units.conv_unit(measure, float(args[1]), src_unit)
@@ -352,6 +356,10 @@ def batch_flite(batch_file):
 
                     elif cmd == "SITEPRESS":
                         rasp_bat.sitepress = dtmp
+                    elif cmd == "SITETEMP":
+                        rasp_bat.sitetemp = dtmp
+                    elif cmd == "SITEALT":
+                        rasp_bat.sitealt = dtmp
                     elif cmd == "FINALALT":
                         rasp_bat.finalalt = dtmp
                     elif cmd == "COASTTIME":
@@ -373,7 +381,7 @@ def batch_flite(batch_file):
                     elif cmd == "STAGE":
                         if itmp > 0:
                             rasp_bat.set_stages(itmp)
-                            stage = rasp_bat.stages[itmp]
+                            stage = rasp_bat.stages[itmp - 1]
                     elif cmd == "STAGEDELAY":
                         stage.stagedelay = dtmp
                     elif cmd == "DIAMETER":

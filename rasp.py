@@ -846,7 +846,7 @@ def main():
 
 
 def find_nose(nose):
-    for name, shape in NOSES:
+    for name, shape in NOSES.items():
         if name.startswith(nose.lower()):
             return name
 
