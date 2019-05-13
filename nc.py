@@ -6,8 +6,14 @@ import raspinfo
 import rasp
 
 VERSION = '4.2'
-press_oride = False
 
+# default files
+if sys.platform == "Windows":
+    PRINTER = "PRN"
+    SCREEN = "CON"
+else:
+    PRINTER = "/dev/lp"
+    SCREEN = "/dev/tty"
 
 # Todo: make this a named_tuple
 """
@@ -110,6 +116,7 @@ class StageBat:
         self.drymass = Dbl("0.00", "oz")
         self.launchmass = Dbl("0.00", "oz")
         self.cd = Dbl("0.75", "")
+        self.enginefile = "rasp.eng"
         self.motorname = ""
         self.nummotor = 1
 
@@ -137,7 +144,6 @@ class RocketBat:
         # self.raillength, "5.00", "ft", 1.523999995)
         
         self.raillength = Dbl("5.00", "ft")
-        self.enginefile = "rasp.eng"
         self.destination = "screen"
         self.outfile = ""
         self.theta = Dbl("0.00", "deg")
@@ -164,10 +170,9 @@ class RocketBat:
         print("BatStru->sitetemp    = %s" % str(self.sitetemp))
         print("BatStru->sitepress   = %s" % str(self.sitepress))
         print("BatStru->raillength  = %s" % str(self.raillength))
-        print("BatStru->theta       = %s" % str(self.theta.inp))
+        print("BatStru->theta       = %s" % str(self.theta))
         print("BatStru->finalalt    = %s" % str(self.finalalt))
         print("BatStru->coasttime   = %s" % str(self.coasttime))
-        print("BatStru->enginefile  = %s" % self.enginefile)
         print("BatStru->destination = %s" % self.destination)
         print("BatStru->outfile     = %s" % self.outfile)
         print("BatStru->nosetype    = %s" % self.nosetype)
@@ -183,15 +188,52 @@ class RocketBat:
             print("   cd [%d]           = %s" % (j, stage.cd))
             print("   drymass [%d]      = %s" % (j, stage.drymass))
             print("   nummotor [%d]     = %d" % (j, stage.nummotor))
+            print("   enginefile [%d]   = %s" % (j, stage.enginefile))
             print("   motorname [%d]    = %s" % (j, stage.motorname))
             print("   stagedelay [%d]   = %s" % (j, stage.stagedelay))
             print("   launchmass [%d]   = %s" % (j, stage.launchmass))
+
+    def export(self):
+        print("TITLE               ", self.title)
+        if self.mode == 0:
+            print("SUMMARY             ")
+        elif self.mode == 1:
+            print("VERBOSE             ")
+        elif self.mode == 2:
+            print("DEBUG               ")
+        print("UNITS               ", self.units)
+        print("OUTFILE             ", self.outfile)
+        print()
+        print("SITETEMP            ", self.sitetemp)
+        print("SITEALT             ", self.sitealt)
+        print("RAILLENGTH          ", self.raillength)
+        print()
+        print("NOSETYPE            ", self.nosetype)
+        print("DESTINATION         ",  self.destination)
+        print("THETA               ", self.theta)
+        print("FINALALT            ", self.finalalt)
+        print("COASTTIME           ", self.coasttime)
+        print("NUMSTAGES           ", len(self.stages))
+
+        for i, stage in enumerate(self.stages, start=1):
+            print("STAGE %d            " % i)
+            print("  DIAMETER          ", stage.diameter)
+            print("  NUMFINS           ", stage.numfins)
+            print("  FINTHICKNESS      ", stage.finthickness)
+            print("  FINSPAN           ", stage.finspan)
+            print("  DRYMASS           ", stage.drymass)
+            print("  LAUNCHMASS        ", stage.launchmass)
+            print("  CD                ", stage.cd)
+            print("  NUMMOTOR          ", stage.nummotor)
+            print("  MOTORFILE         ", stage.enginefile)
+            print("  MOTORNAME         ", stage.motorname)
+            print("  STAGEDELAY        ", stage.stagedelay)
 
     def as_flight(self):
         flight = rasp.Flight()
 
         flight.rname = self.title
-        flight.ename = self.enginefile
+        flight.ename = self.stages[0].enginefile
         flight.verbose = self.mode > 0
         flight.site_alt = self.sitealt
         flight.coast_base = self.coasttime
@@ -207,8 +249,8 @@ class RocketBat:
 
         rocket.nose = rasp.find_nose(self.nosetype)
 
-        for i, stg in enumerate(rocket.stages):
-            flight.e_info.append(raspinfo.find_motor(stg.motorname))
+        for i, stg in enumerate(self.stages):
+            flight.e_info.append(raspinfo.find_motor(stg.enginefile, stg.motorname))
 
             rocket.stages.append(rasp.Stage())
             stage = rocket.stages[-1]
@@ -223,46 +265,29 @@ class RocketBat:
             stage.fins.thickness = stg.finthickness / rasp.IN2M
             stage.fins.span = stg.finspan / rasp.IN2M
 
-    def export(self):
-        print("TITLE", self.title)
-        print("SUMMARY")
-        print("UNITS", self.units)
-        print()
-        print("SITETEMP", self.sitetemp)
-        print("SITEALT", self.sitealt)
-        print("RAILLENGTH", self.raillength)
-        print("MOTORFILE", self.enginefile)
-        print()
-        print("NOSETYPE", self.nosetype)
-        print("DESTINATION",  self.destination)
-        print("THETA", self.theta)
-        print("NUMSTAGES", len(self.stages))
+        return flight
 
 
 def to_da_moon_alice(rkt):
-
     flight = rkt.as_flight()
 
     print("Launching", flight.rname)
 
     fname = None
-    if sys.platform == "Windows":
-        if rkt.destination == "printer":
-            fname = "CON"
+    if rkt.destination == "printer":
+        fname = PRINTER
+    elif rkt.destination == "screen":
+        fname = SCREEN
+    elif rkt.destination == "file":
+        if rkt.outfile:
+            fname = rkt.outfile
         else:
-            fname = "PRN"
-    elif sys.platform == "Linux":
-        if rkt.destination == "printer":
-            fname = "/dev/lp"
-        else:
-            fname = "/dev/tty"
-
-    if rkt.outfile:
-        fname = rkt.outfile
+            fname = SCREEN
 
     with open(fname, "w") as fp:
-        rasp.dump_header(fp, flight)
-        rasp.calc(flight)
+        flight.dump_header(fp)
+        results = rasp.calc(flight)
+        results.display(fp)
 
 
 def batch_flite(batch_file):
@@ -366,8 +391,6 @@ def batch_flite(batch_file):
                         rasp_bat.coasttime = dtmp
                     elif cmd == "RAILLENGTH":
                         rasp_bat.raillength = dtmp
-                    elif cmd == "ENGINEFILE":
-                        rasp_bat.enginefile = stmp
                     elif cmd == "DESTINATION":
                         rasp_bat.destination = stmp
                     elif cmd == "OUTFILE":
@@ -398,6 +421,8 @@ def batch_flite(batch_file):
                         stage.launchmass = dtmp
                     elif cmd == "CD":
                         stage.cd = dtmp
+                    elif cmd == "ENGINEFILE":
+                        stage.enginefile = stmp
                     elif cmd == "MOTORNAME":
                         stage.motorname = stmp
                     elif cmd == "NUMMOTOR":

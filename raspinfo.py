@@ -9,11 +9,7 @@ from collections import namedtuple
 
 VERSION = '5.0'
 ENG_NAME = "rasp.eng"  # name of engine database file
-
-LPP = 56
-
-Pages = 0
-Lines = LPP
+CH1 = '#'
 
 engine_info = {
     "t2": ("thrust duration", "seconds"),
@@ -37,7 +33,8 @@ def parse_commandline():
     global args, parser
 
     parser = argparse.ArgumentParser(prog='raspinfo', description=f'Dump RASP engine info (v{VERSION})')
-    parser.add_argument('-c', '--csv', action='store_true', help='output CSV format')
+    parser.add_argument('-c', '--csv', dest='fmt', action='store_const', const='csv',
+                        default='txt', help='output CSV format')
     parser.add_argument('-q', '--quiet', action='store_true', help="be quiet about it")
     parser.add_argument('--version', action='version', version=f'v{VERSION}')
     parser.add_argument('engfile', default=ENG_NAME, nargs='?', action='store', help='engine filename')
@@ -50,7 +47,7 @@ def load_engine(engine_file):
     eng_info = {}
     parsing_thrust = False
     with open(engine_file) as fp:
-        for line in fp.readlines():
+        for linenum, line in enumerate(fp.readlines(), start=1):
             if line.startswith(';'):
                 continue
 
@@ -74,9 +71,8 @@ def load_engine(engine_file):
                 parsing_thrust = True
             else:
                 t, thrust = [float(v) for v in line.strip().split()]
-                if t > 0 and thrust > 0:
-                    e_info['thrust'].append((t, thrust))
-                elif t > 0 and thrust == 0:
+                e_info['thrust'].append((t, thrust))
+                if t > 0 and thrust == 0:
                     e_info['t2'] = t
 
                     t1, f1, ntot, npeak = 0, 0, 0, 0
@@ -85,7 +81,7 @@ def load_engine(engine_file):
                         ntot += (float(t2) - t1) * (f1 + float(f2)) / 2
                         t1, f1 = float(t2), float(f2)
 
-                        if t1 <= 0 and f1 <= 0:
+                        if t1 > 0 and f1 <= 0:
                             break
 
                     e_info['ntot'] = ntot
@@ -106,7 +102,7 @@ def load_engine(engine_file):
 def find_motor(eng_file, mcode):
     eng_info = load_engine(eng_file)
 
-    return eng_info[mcode]
+    return eng_info[mcode.upper()]
 
 
 def get_motor(eng_file, prompt="Motor code"):
@@ -126,7 +122,7 @@ def get_motor(eng_file, prompt="Motor code"):
             return motor
 
 
-def print_engine_info(e):
+def print_engine_info(e, fp, fmt='txt'):
     if e['wt'] >= 100.0:
         mm = "%6.2lf" % e['wt']
     elif e['wt'] >= 10.0:
@@ -169,84 +165,59 @@ def print_engine_info(e):
         mx = "%6.3lf" % e['npeak']
 
     dxl = "%dx%d" % (e['diam'], e['dlen'])
-    if args.csv:
-        print("\"%s\",\"%s\",%s,%s,%.2lf,%s,%s,%s,\"%s\"" %
-              (e['code'], e['mfg'][:5], tot, avg, e['t2'], mx, mm, pm, dxl))
-
-        for d in e['delay']:
-            if d == 0:
-                print(",\"%d" % d)
-            else:
-                print("-%d" % d)
-   
-        print("\"\n")
+    if fmt == 'csv':
+        print("\"%s\",\"%s\",%s,%s,%.2lf,%s,%s,%s,\"%s\",\"%s\"" %
+              (e['code'], e['mfg'][:5], tot, avg, e['t2'], mx, mm, pm, dxl,
+               '-'.join(str(d) for d in e['delay'])), file=fp)
     else:
-        print("%-9s %-5s  %6s %6s %5.2lf  %6s  %6s  %6s %7s %s" %
-              (e['code'], e['mfg'][:5], tot, avg, e['t2'], mx, mm, pm, dxl, '-'.join(str(d) for d in e['delay'])))
+        print("%c%-9s  %-5s  %7s  %6s  %5.2lf  %6s  %6s  %6s %7s %s" %
+              (CH1, e['code'], e['mfg'][:5], tot, avg, e['t2'], mx, mm, pm, dxl,
+               '-'.join(str(d) for d in e['delay'])), file=fp)
 
 
-def print_engine_header():
-
-    if args.csv:
+def print_engine_header(fp, fmt='txt'):
+    if fmt == 'csv':
         print("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"" % (
-             "", "", 
-             "Total", "Avg", 
-             "Burn", 
-             "Peak", "Motor", "Prop",
-             "\",\""))
+             "", "", "Total", "Avg", "Burn",
+             "Peak", "Motor", "Prop", "\",\""), file=fp)
         
         print("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"" % (
-             "Motor", "Motor", 
-             "Impulse", "Thrust", 
-             "Time", 
-             "Thrust", "Mass", "Mass",
-             "\",\""))
+             "Motor", "Motor", "Impulse", "Thrust",
+             "Time", "Thrust", "Mass", "Mass", "\",\""), file=fp)
         
         print("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"" % (
-             "Desig", "Mfg", 
-             "(Nsec)", "(N)", 
-             "(sec)", 
-             "(N)", "(Kg)", "(Kg)",
-             "D x L\",\"Delays"))
+             "Desig", "Mfg", "(Nsec)", "(N)", "(sec)",
+             "(N)", "(Kg)", "(Kg)", "D x L\",\"Delays"), file=fp)
     else:
-        print("%-9s %-5s  %6s %6s %5s  %6s  %6s  %6s %s %d" % (
-             "", "", 
-             "Total", "Avg", 
-             "Burn", 
-             "Peak", "Motor", "Prop",
-             "       Page ", Pages))
+        print(CH1, file=fp)
+        print("%c%-9s  %-5s  %7s  %6s  %5s  %6s  %6s  %6s %s" % (
+             CH1, "", "", "Total", "Avg", "Burn",
+             "Peak", "Motor", "Prop", ""), file=fp)
         
-        print("%-9s %-5s %7s %6s %5s  %6s  %6s  %6s %s" % (
-             "Motor", "Motor", 
-             "Impulse", "Thrust", 
-             "Time", 
-             "Thrust", "Mass", "Mass",
-             ""))
+        print("%c%-9s  %-5s  %7s  %6s  %5s  %6s  %6s  %6s %s" % (
+             CH1, "Motor", "Motor", "Impulse", "Thrust",
+             "Time", "Thrust", "Mass", "Mass", ""), file=fp)
         
-        print("%-9s %-5s  %6s %6s %5s  %6s  %6s  %6s %s" % (
-             "Desig", "Mfg", 
-             "(Nsec)", "(N)", 
-             "(sec)", 
-             "(N)", "(Kg)", "(Kg)",
-             "D x L   Delays"))
+        print("%c%-9s  %-5s  %7s  %6s  %5s  %6s  %6s  %6s %s" % (
+             CH1, "Desig", "Mfg", "(Nsec)", "(N)", "(sec)",
+             "(N)", "(Kg)", "(Kg)", "D x L   Delays"), file=fp)
         
-        print("%-9s %-5s %7s %6s %5s  %6s  %6s  %6s %s" % (
-             "=========", "=====", 
-             "=======", "======", 
-             "=====", 
-             "======", "======", "======",
-             "================="))
+        print("%c%-9s  %-5s  %7s  %6s  %5s  %6s  %6s  %6s %7s %s" % (
+             CH1, "=========", "=====", "=======", "======",
+             "=====", "======", "======", "======",
+             "=======", "=========="), file=fp)
 
 
 def main():
     parse_commandline()
+    print(args)
 
     eng = load_engine(args.engfile)
     # print(json.dumps(eng, indent=2))
 
-    print_engine_header()
+    print_engine_header(sys.stdout, fmt=args.fmt)
     for k in sorted(eng.keys()):
-        print_engine_info(eng[k])
+        print_engine_info(eng[k], sys.stdout, fmt=args.fmt)
 
 
 if __name__ == '__main__':

@@ -212,7 +212,7 @@ class Rocket:
     def __init__(self, name=None):
         self.name = name
         self.nose = None
-        self.stages = [Stage()]
+        self.stages = []
 
     def maxd(self, first=0):
         return max(s.maxd for s in self.stages[first:])
@@ -227,7 +227,7 @@ class Flight:
         self.fname = None
         self.rname = None
         self.ename = None
-        self.e_info = None
+        self.e_info = []
 
         self.verbose = False
         self.base_temp = 0.0
@@ -246,12 +246,54 @@ class Flight:
     def stage_wt(self, num):
         # todo: num is zero-based
         stage = self.rocket.stages[num]
-        return stage.weight + self.e_info[num].wt * stage.engnum
+        return stage.weight + self.e_info[num]['wt'] * stage.engnum
+
+    def dump_header(self, fp):
+        print(CH1, file=fp)
+
+        print("%c Rocket Name: %s" % (CH1, self.rname), file=fp)
+        print("%c Motor File:  %s" % (CH1, self.ename), file=fp)
+
+        wt = self.rocket_wt()
+        for i, stage in enumerate(self.rocket.stages):
+            print(CH1, file=fp)
+            print("%c%5s  %-16s  %8s  %8s  %8s  %9s" % (
+              CH1, "Stage", "Engine", "Bare", "Launch", "AirFrame", "Effective"), file=fp)
+
+            print("%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
+              CH1, "Num", "(Qt) Type", "Weight", "Weight", "Diameter",
+              "Diameter", "Cd"), file=fp)
+
+            print("%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
+              CH1, "=====", "================", "========", "========",
+              "========", "=========", "====="), file=fp)
+
+            print("%c%5d  (%1d) %-12s  %8.2f  %8.2f  %8.3f  %9.3f  %5.3f" % (
+              CH1, stage.number, stage.engnum, self.e_info[i]['code'],
+              stage.weight / OZ2KG, self.rocket_wt() / OZ2KG, stage.maxd,
+              stage.maxd + math.sqrt(stage.fins.area() / (IN2M * IN2M * math.pi)) / 2,
+              stage.cd), file=fp)
+
+            wt -= self.stage_wt(i)
+
+            raspinfo.print_engine_header(fp)
+            raspinfo.print_engine_info(self.e_info[i], fp)
+
+        if self.verbose:
+            print(CH1, file=fp)
+            print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+                CH1, "Time", "Altitude", "Velocity", "Accel",
+                "Weight", "Thrust", "Drag"), file=fp)
+            print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+                CH1, "(Sec)", "(Feet)", "(Feet/Sec)", "(Ft/Sec^2)",
+                "(Grams)", "(Newtons)", "(Newtons)"), file=fp)
+            print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+                CH1, "-----", "---------", "---------", "---------",
+                "-----------", "---------", "---------"), file=fp)
 
 
 class Results:
     def __init__(self):
-        self.mass = 0.0
         self.rod = 0.0
         self.drag_bias = 0
         self.t_rod = 0.0  # launch rod info
@@ -280,8 +322,48 @@ class Results:
         self.end_burn = 0    # End of engine burn  (includes previous stage)
         self.end_stage = 0   # End of stage (includes previous stage)
 
+        self.tee = []
+        self.acc = []
+        self.mass = []
+
     def add_event(self, time, desc):
         self.events.append((time, desc))
+
+    def display(self, fp, verbose=False):
+        for i, tee in enumerate(self.tee):
+            if i % 10 == 0:
+                print_alt = self.alt[i] * M2FT
+                print_vel = self.vel[i] * M2FT
+                print_accel = self.acc[i] * M2FT
+                print_mass = self.mass[i] * 1000  # I want my Mass in Grams
+
+                if verbose:
+                    print(" %4.1lf %10.1lf %10.1lf %10.1lf %11.2lf %10.3lf %10.3lf" % (
+                          tee, print_alt, print_vel, print_accel,
+                          print_mass, self.thrust[i], self.drag[i]), file=fp)
+
+        # TODO: add this
+        # fprintf(stream, "%cStage %d Ignition at %5.2f sec.\n", ch1, this_stage + 1, t)
+
+        print(CH1, file=fp)
+        print("%cMaximum altitude attained = %.1lf feet (%.1lf meters)" % (
+              CH1, self.max_alt * M2FT, self.max_alt), file=fp)
+        print("%cTime to peak altitude =     %.2lf seconds" % (CH1, self.t_max_alt), file=fp)
+        print("%cMaximum velocity =          %.1lf feet/sec at %.2lf sec" % (
+                CH1, self.max_vel * M2FT, self.t_max_vel), file=fp)
+        print("%cCutoff velocity =           %.1lf feet/sec at %.1lf feet ( %.2lf sec )" % (
+               CH1, self.vcoff * M2FT, self.acoff * M2FT, self.tcoff), file=fp)
+        print("%cMaximum acceleration =      %.1lf feet/sec^2 at %.2lf sec" % (
+               CH1, self.max_accel * M2FT, self.t_max_accel), file=fp)
+        print("%cMinimum acceleration =      %.1lf feet/sec^2 at %.2lf sec" % (
+               CH1, self.min_accel * M2FT, self.t_min_accel), file=fp)
+        print("%cLaunch rod time =  %.2lf,  rod len   = %.1lf,       velocity  = %.1lf" % (
+               CH1, self.t_rod, self.rod * M2FT, self.v_rod), file=fp)
+        print("%cSite Altitude =   %5.0lf,  site temp = %.1lf F" % (
+               CH1, self.site_alt * M2FT, ((self.base_temp - 273.15) * 9 / 5) + 32), file=fp)
+        print("%cBarometer     =   %.2f,  air density = %.4lf,  Mach vel  = %.1lf" % (
+              CH1, self.baro_press, self.rho_0, self.mach1_0 * M2FT),
+              file=fp)
 
 
 def get_str(prompt, default):
@@ -397,7 +479,6 @@ def choices(defaults):
 
     # Environmental Data
     flight.site_alt = get_float("Launch Site Altitude in Feet", defaults['site_alt'] * M2FT) / M2FT
- 
     flight.faren_temp = get_float("Air Temp in DegF", defaults['faren_temp'])
  
     flight.base_temp = (flight.faren_temp - 32) * 5 / 9 + 273.15  # convert to degK
@@ -463,7 +544,7 @@ def calc(flight):
     engine = flight.e_info[0]
      
     # figure start and stop times for motor burn and stage
-    end_burn = engine.t2
+    end_burn = engine['t2']
     end_stage = end_burn + stage.stage_delay
 
     # What is the effective Diameter and drag coeff
@@ -478,10 +559,10 @@ def calc(flight):
     results.alt = [LAUNCHALT]
     results.vel = [0.0]
     results.acc = [0.0]
-    if engine.thrust[0] == 0.0:       # .thrust[0] = Time
-        thrust = engine.thrust[1]     # .thrust[1] = Thrust
-        if thrust != 0.0:
-            results.acc = [(thrust - drag) / mass - G]
+    results.mass = [mass]
+    t, thrust = engine['thrust'][0]
+    if t == 0.0 and thrust != 0.0:
+        results.acc = [(thrust - drag) / mass - G]
   
     # Launch Loop
     t = 0.000000
@@ -566,24 +647,28 @@ def calc(flight):
         if start_burn <= t <= end_burn:
             burn_time += DELTA_T  # add to burn time
 
+            time_val, thrust_val = engine['thrust'][thrust_index]
+
             # see if we need to use the next thrust point
             # All times are relative to burn time for these calculations
-            if burn_time > engine.thrust[thrust_index][0]:
-                old_time = engine.thrust[thrust_index][0]
-                old_thrust = engine.thrust[thrust_index][1]
+            if burn_time > time_val:
+                old_time = time_val
+                old_thrust = thrust_val
+
                 thrust_index += 1
+                time_val, thrust_val = engine['thrust'][thrust_index]
 
             # Logic to smooth transition between thrust points.
             # Transitions are linear rather than discontinuous
-            thrust = flight.engine.thrust[thrust_index + 1][1] - old_thrust
-            thrust *= (burn_time - old_time) / (engine.thrust[thrust_index][1] - old_time)
+            thrust = thrust_val - old_thrust
+            thrust *= (burn_time - old_time) / (time_val - old_time)
             thrust += old_thrust
             thrust *= stage.engnum
 
             # kjh changed this to consume propellant at thrust rate
             sum_o_thrust += (thrust * DELTA_T)
-            m1 = sum_o_thrust / (engine.ntot * stage.engnum)
-            m1 *= engine.m2 * stage.engnum
+            m1 = sum_o_thrust / (engine['ntot'] * stage.engnum)
+            m1 *= engine['m2'] * stage.engnum
 
             # This is the Original Method
             #
@@ -661,6 +746,7 @@ def calc(flight):
         results.acc.append(accel)
         results.vel.append(vel)
         results.alt.append(alt)
+        results.mass.append(mass)
 
         # test for lift-off and apogee
         if vel > 0:
@@ -697,89 +783,9 @@ def calc(flight):
     return results
 
 
-def dump_header(fp, flight):
-    print(CH1, file=fp)
-
-    print("%c Rocket Name: %s" % (CH1, flight.rname), file=fp)
-    print("%c Motor File:  %s" % (CH1, flight.ename), file=fp)
-
-    wt = flight.rocket_wt()
-    for i, stage in enumerate(flight.rocket.stages):
-        print(CH1, file=fp)
-        print("%c%5s  %-16s  %8s  %8s  %8s  %9s" % (
-          CH1, "Stage", "Engine", "Bare", "Launch", "AirFrame", "Effective"), file=fp)
-
-        print("%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
-          CH1, "Num", "(Qt) Type", "Weight", "Weight", "Diameter",
-          "Diameter", "Cd"), file=fp)
-
-        print("%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
-          CH1, "=====", "================", "========", "========",
-          "========", "=========", "====="), file=fp)
-
-        print("%c%5d  (%1d) %-12s  %8.2f  %8.2f  %8.3f  %9.3f  %5.3f" % (
-          CH1, stage.stage_num, stage.engnum, flight.e_info[i].code,
-          stage.weight / OZ2KG, flight.rocket_wt() / OZ2KG, stage.maxd,
-          stage.maxd + math.sqrt(stage.fins.area() / (IN2M * IN2M * math.pi)) / 2,
-          stage.cd), file=fp)
-
-        wt -= flight.stage_wt(i)
-
-        raspinfo.print_engine_info(flight.e_info[i])
-
-    if flight.verbose:
-        print(CH1, file=fp)
-        print("%c%4s %10s %10s %10s %11s %10s %10s" % (
-            CH1, "Time", "Altitude", "Velocity", "Accel",
-            "Weight", "Thrust", "Drag"), file=fp)
-        print("%c%4s %10s %10s %10s %11s %10s %10s" % (
-            CH1, "(Sec)", "(Feet)", "(Feet/Sec)", "(Ft/Sec^2)",
-            "(Grams)", "(Newtons)", "(Newtons)"), file=fp)
-        print("%c%4s %10s %10s %10s %11s %10s %10s" % (
-            CH1, "-----", "---------", "---------", "---------",
-            "-----------", "---------", "---------"), file=fp)
-
-
 def display_flight(flight, fp):
     for stage in range(len(flight.rocket.stages)):
         print("%cStage Weight [%d]:  %9.4f" % (CH1, stage + 1, flight.totalwt(stage)), file=fp)
-
-
-def display_results(results, fp):
-    for i, tee in enumerate(results.tee):
-        if i % 10 == 0:
-            print_alt = results.alt[i] * M2FT
-            print_vel = results.vel[i] * M2FT
-            print_accel = results.accel[i] * M2FT
-            print_mass = results.mass[i] * 1000  # I want my Mass in Grams
-
-            if args.quiet:
-                print(" %4.1lf %10.1lf %10.1lf %10.1lf %11.2lf %10.3lf %10.3lf" % (
-                      tee, print_alt, print_vel, print_accel,
-                      print_mass, results.thrust[i], results.drag[i]), file=fp)
-
-    # TODO: add this
-    # fprintf(stream, "%cStage %d Ignition at %5.2f sec.\n", ch1, this_stage + 1, t)
-
-    print(CH1, file=fp)
-    print("%cMaximum altitude attained = %.1lf feet (%.1lf meters)" % (
-          CH1, results.max_alt * M2FT, results.max_alt), file=fp)
-    print("%cTime to peak altitude =     %.2lf seconds" % (CH1, results.max_t), file=fp)
-    print("%cMaximum velocity =          %.1lf feet/sec at %.2lf sec" % (
-            CH1, results.max_vel * M2FT, results.t_max_vel), file=fp)
-    print("%cCutoff velocity =           %.1lf feet/sec at %.1lf feet ( %.2lf sec )" % (
-           CH1, results.vcoff * M2FT, results.acoff * M2FT, results.tcoff), file=fp)
-    print("%cMaximum acceleration =      %.1lf feet/sec^2 at %.2lf sec" % (
-           CH1, results.max_accel * M2FT, results.t_max_accel), file=fp)
-    print("%cMinimum acceleration =      %.1lf feet/sec^2 at %.2lf sec" % (
-           CH1, results.min_accel * M2FT, results.t_min_accel), file=fp)
-    print("%cLaunch rod time =  %.2lf,  rod len   = %.1lf,       velocity  = %.1lf" % (
-           CH1, results.t_rod, results.rod * M2FT, results.v_rod), file=fp)
-    print("%cSite Altitude =   %5.0lf,  site temp = %.1lf F" % (
-           CH1, results.site_alt * M2FT, ((results.base_temp - 273.15) * 9 / 5) + 32), file=fp)
-    print("%cBarometer     =   %.2f,  air density = %.4lf,  Mach vel  = %.1lf" % (
-          CH1, results.baro_press, results.rho_0, results.mach1_0 * M2FT),
-          file=fp)
 
 
 def parse_commandline():
@@ -835,8 +841,8 @@ def main():
             flight = choices(defaults)
 
             with open(flight.fname) as fp:
-                dump_header(fp, flight)
-                calc(flight)
+                flight.dump_header(fp)
+                results = calc(flight)
 
             ans = input("\nDo Another One? ")
             if ans == "y" or ans == "Y":

@@ -1,0 +1,24 @@
+#
+#Rocket Name:  Spock's Johnson with AltAcc at Ocotillo on a Summer Day
+#Motor File:   /home/rnee/projects/rasp-v42/rasp.eng
+#
+#Stage  Engine                Bare    Launch  AirFrame  Effective
+#  Num  (Qt) Type           Weight    Weight  Diameter   Diameter     Cd
+#=====  ================  ========  ========  ========  =========  =====
+#    1  (1) F50              42.61     45.50     2.230      2.546  0.530
+#
+#                 Average     Total      Peak    Burn
+#                  Thrust   Impulse    Thrust    Time  Delays
+#Type   Mfg/Opt     (Nt)   (Nt-Sec)     (Nt)    (Sec)  (Sec)
+#=====  =======  ========  ========  ========  ======  =========
+#F50    A-T         48.16     78.02     78.12   1.620  4 6 9
+#
+#Maximum altitude attained = 464.0 feet (141.4 meters).
+#Time to peak altitude =     5.90 seconds.
+#Maximum velocity =          149.9 feet/sec at 1.37 sec.
+#Cutoff velocity =           144.6 feet/sec at 162.2 feet ( 1.62 sec ).
+#Maximum acceleration =      166.7 feet/sec^2 at 0.05 sec.
+#Minimum acceleration =      -37.2 feet/sec^2 at 1.62 sec.
+#Launch rod time =  0.27,  rod len   = 5.0,       velocity  = 40.0
+#Site Altitude =     460,  site temp = 95.0 F
+#Barometer     =   29.43,  air density = 1.1271,  Mach vel  = 1154.7

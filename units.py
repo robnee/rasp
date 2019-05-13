@@ -154,14 +154,13 @@ def conv_unit(unit_type, val, in_unit, out_unit=None):
 def unit_label(unit_type, unit):
     try:
         rec = get_unit(unit_type, unit)
-    except KeyError as ex:
+    except KeyError:
         if unit.endswith('s'):
             rec = get_unit(unit_type, unit[:-1])
+        else:
+            return ""
 
-    if rec:
-        return rec[1]
-    else:
-        return ""
+    return rec[1]
 
 
 def main():
