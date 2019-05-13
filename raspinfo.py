@@ -92,6 +92,7 @@ def load_engine(engine_file):
                     for v in sdelay.strip().split('-'):
                         e_info['delay'].append(int(v))
 
+                    # todo: create naped tuple
                     eng_info[code] = e_info
 
                     parsing_thrust = False

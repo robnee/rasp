@@ -194,6 +194,8 @@ class RocketBat:
             print("   launchmass [%d]   = %s" % (j, stage.launchmass))
 
     def export(self):
+        """ export in batch file format """
+        
         print("TITLE               ", self.title)
         if self.mode == 0:
             print("SUMMARY             ")
@@ -209,7 +211,7 @@ class RocketBat:
         print("RAILLENGTH          ", self.raillength)
         print()
         print("NOSETYPE            ", self.nosetype)
-        print("DESTINATION         ",  self.destination)
+        print("DESTINATION         ", self.destination)
         print("THETA               ", self.theta)
         print("FINALALT            ", self.finalalt)
         print("COASTTIME           ", self.coasttime)
@@ -230,6 +232,8 @@ class RocketBat:
             print("  STAGEDELAY        ", stage.stagedelay)
 
     def as_flight(self):
+        """ convert RocketBat to Flight """
+
         flight = rasp.Flight()
 
         flight.rname = self.title

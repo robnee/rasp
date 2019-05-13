@@ -100,30 +100,6 @@ struct motor {
     char  mfg[32];         /* manufacturer info                            */
     unsigned long offset ; /* byte index into .eng file                    */
 };
-
-struct engine {
-    double t2;             /* thrust duration    (seconds)                 */
-    double m2;             /* propellant wt.     (kilograms)               */
-    double wt;             /* initial engine wt. (kilograms)               */
-    double thrust[MAXT];   /* thrust curve     (Time-sec,Thrust-Newtons)   */
-    double navg;           /* average thrust     (newtons)                 */
-    double ntot;           /* total impulse      (newton-seconds)          */
-    double npeak;          /* peak thrust        (newtons)                 */
-    int   dia;             /* engine diameter    (millimeters)             */
-    int   len;             /* engine length      (millimeters)             */
-    int   delay[8];        /* ejection delays available (sec)              */
-    char  mfg[32];         /* manufacturer info                            */
-    char  code[32];        /* engine name                                  */
-};
-
-struct nose_cone {
-    char    * name ;    /* Verbose Nose Cone Name */
-    int       form ;    /* M,C&B Formula to Apply */
-};
-
-   int nexteng,      /* next free engine index */
-       destnum,      /* index into array of devices for output - dest */
-       stagenum;     /* number of stages */
 """
 
 import os
@@ -268,6 +244,7 @@ class Flight:
               CH1, "=====", "================", "========", "========",
               "========", "=========", "====="), file=fp)
 
+            # todo: e_info is a named tuple so [] should not be needed
             print("%c%5d  (%1d) %-12s  %8.2f  %8.2f  %8.3f  %9.3f  %5.3f" % (
               CH1, stage.number, stage.engnum, self.e_info[i]['code'],
               stage.weight / OZ2KG, self.rocket_wt() / OZ2KG, stage.maxd,
@@ -404,10 +381,12 @@ def choices(defaults):
     flight = Flight()
 
     flight.rname = get_str("Rocket Name", defaults['rname'])
- 
-    stagenum = get_int("Number of Stages", 1)
-
+    
     flight.rocket = rocket = Rocket()
+    
+    rocket.nose = get_nose("Nose (<O>give,<C>onic,<E>lliptic,<P>arabolic,<B>lunt)", defaults['nose'])
+
+    stagenum = get_int("Number of Stages", 1)
 
     for num in range(stagenum):
         flight.e_info.append(raspinfo.get_motor(defaults['ename']))
@@ -420,9 +399,6 @@ def choices(defaults):
 
         stage.engnum = get_int(prompt, defaults['engnum'])
  
-        if num == 0:
-            rocket.nose = get_nose("Nose (<O>give,<C>onic,<E>lliptic,<P>arabolic,<B>lunt)",
-                                   defaults['nose'])
         if stagenum > 1:
             prompt = f"Weight of Stage {num + 1} w/o Engine in Ounces"
         else:
@@ -493,19 +469,9 @@ def choices(defaults):
     destnum = get_int("Send Data to:\n\t(1) Screen\n\t(2) Printer\n\t(3) Disk file\nEnter #", 1)
 
     if destnum == 1:
-        if sys.platform == 'Win32':
-            flight.fname = "CON"
-        elif sys.platform == "Linux":
-            flight.fname = "/dev/tty"
-        elif sys.platform == 'VMS':
-            flight.fname = "TT:"
+        flight.fname = raspinfo.SCREEN
     elif destnum == 2:
-        if sys.platform == 'Win32':
-            flight.fname = "PRN"
-        elif sys.platform == "Linux":
-            flight.fname = "/dev/lp"
-        elif sys.platform == 'VMS':
-            flight.fname = "LP:"
+        flight.fname = raspinfo.PRINTER
     else:
         bname = get_str("Enter File Base Name", None)
         fname = '.'.join([bname, flight.e_info[0].code])
