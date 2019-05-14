@@ -714,16 +714,12 @@ def calc(flight):
         else:
             accel = ((thrust + drag) / mass) - G
 
+        # todo: remove this
+        if t < 0.01:
+            print(t, launched, drag, thrust, accel, vel)
+
         vel = vel + accel * DELTA_T
         alt = alt + vel * DELTA_T
-
-        results.tee.append(t)
-        results.acc.append(accel)
-        results.vel.append(vel)
-        results.alt.append(alt)
-        results.mass.append(mass)
-        results.drag.append(drag)
-        results.thrust.append(thrust)
 
         # test for lift-off and apogee
         if vel > 0:
@@ -735,6 +731,14 @@ def calc(flight):
 
             if (alt <= 0.0) or (coast_time > flight.coast_base):  # kjh to coast a while
                 break  # apogee, all done
+
+        results.tee.append(t)
+        results.acc.append(accel)
+        results.vel.append(vel)
+        results.alt.append(alt)
+        results.mass.append(mass)
+        results.drag.append(drag)
+        results.thrust.append(thrust)
 
         if alt <= flight.rod and vel > 0:
             results.t_rod = t
@@ -763,70 +767,6 @@ def calc(flight):
 def display_flight(flight, fp):
     for stage in range(len(flight.rocket.stages)):
         print("%cStage Weight [%d]:  %9.4f" % (CH1, stage + 1, flight.totalwt(stage)), file=fp)
-
-
-def parse_commandline():
-    global args, parser
-
-    parser = argparse.ArgumentParser(prog='raspinfo', description=f'Dump RASP engine info (v{VERSION})')
-    parser.add_argument('-d', '--debug', action='store_true', help='debug output')
-    parser.add_argument('-q', '--quiet', action='store_true', help="be quiet about it")
-    parser.add_argument('--version', action='version', version=f'v{VERSION}')
-    parser.add_argument('raspfiles', nargs='*', help="rasp batch files")
-
-    args = parser.parse_args()
-
-
-def main():
-    print("\nRASP - Rocket Altitude Simulation Program V", VERSION)
-
-    parse_commandline()
-    
-    # v4.1 do the Home bit
-    rasp_home = os.environ["RASPHOME"] if "RASPHOME" in os.environ else None
-
-    # is the full path available?
-    prog_name = pathproc.base_name(sys.argv[0])
-    if prog_name == sys.argv[0]:
-        # search for __main__
-        prog_name = pathproc.whereis(sys.argv[0])
-    else:
-        prog_name = sys.argv[0]  # fqpn in sys.argv[0]
-
-    ename = pathproc.whereis(DFILE, rasp_home, prog_name)
-    eng_home = pathproc.dir_name(ename)
-
-    if args.debug:
-        print("RASP Home = ", rasp_home)
-        print("Eng Home  = ", eng_home)
-        print("Prog Name = ", prog_name)
-        print("Eng File  = ", ename)
-
-    # default values for choices
-    defaults = defaultdict()
-    defaults['faren_temp'] = 59
-    defaults['site_alt'] = LAUNCHALT / M2FT
-    defaults['baro_press'] = STD_ATM
-    defaults['rod'] = ROD
-
-    # this is the batch mode block ( see n.c )
-    if args.raspfiles:
-        for rasp in args.raspfiles:
-            nc.batch_flite(rasp)
-    else:
-        while True:
-            flight = choices(defaults)
-
-            with open(flight.fname) as fp:
-                flight.dump_header(fp)
-                results = calc(flight)
-                results.display(fp)
-
-            ans = input("\nDo Another One? ")
-            if ans == "y" or ans == "Y":
-                print()
-            else:
-                break
 
 
 def find_nose(nose):
@@ -899,3 +839,76 @@ def isa_temp(base_temp, alt):
         dt = 0.0
 
     return dt
+
+    
+def parse_commandline():
+    global args, parser
+
+    parser = argparse.ArgumentParser(prog='raspinfo', description=f'Dump RASP engine info (v{VERSION})')
+    parser.add_argument('-d', '--debug', action='store_true', help='debug output')
+    parser.add_argument('-q', '--quiet', action='store_true', help="be quiet about it")
+    parser.add_argument('--version', action='version', version=f'v{VERSION}')
+    parser.add_argument('raspfiles', nargs='*', help="rasp batch files")
+
+    args = parser.parse_args()
+
+    print(sys.argv, args)
+    
+
+def main():
+    print("\nRASP - Rocket Altitude Simulation Program V", VERSION)
+
+    parse_commandline()
+    
+    # v4.1 do the Home bit
+    rasp_home = os.environ["RASPHOME"] if "RASPHOME" in os.environ else None
+
+    # is the full path available?
+    prog_name = pathproc.base_name(sys.argv[0])
+    if prog_name == sys.argv[0]:
+        # search for __main__
+        prog_name = pathproc.whereis(sys.argv[0])
+    else:
+        prog_name = sys.argv[0]  # fqpn in sys.argv[0]
+
+    ename = pathproc.whereis(DFILE, rasp_home, prog_name)
+    eng_home = pathproc.dir_name(ename)
+
+    if args.debug:
+        print("RASP Home = ", rasp_home)
+        print("Eng Home  = ", eng_home)
+        print("Prog Name = ", prog_name)
+        print("Eng File  = ", ename)
+
+    # default values for choices
+    defaults = defaultdict()
+    defaults['faren_temp'] = 59
+    defaults['site_alt'] = LAUNCHALT / M2FT
+    defaults['baro_press'] = STD_ATM
+    defaults['rod'] = ROD
+
+    # this is the batch mode block ( see n.c )
+    if args.raspfiles:
+        for rasp in args.raspfiles:
+            nc.batch_flite(rasp)
+    else:
+        while True:
+            flight = choices(defaults)
+
+            with open(flight.fname) as fp:
+                flight.dump_header(fp)
+                results = calc(flight)
+                results.display(fp)
+
+            ans = input("\nDo Another One? ")
+            if ans == "y" or ans == "Y":
+                print()
+            else:
+                break
+                
+if __name__ == '__main__':
+    # todo: this is to work around pythonista bugs
+    sys.argv = ['rasp/rasp.py', '-d', 'test.ovi']
+    os.chdir('test')
+    main()
+                

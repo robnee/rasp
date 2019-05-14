@@ -4,6 +4,8 @@ import pathlib
 
 
 def dir_name(filename):
+    if not filename:
+        return None
     path = pathlib.Path(filename)
     return path.parent
 

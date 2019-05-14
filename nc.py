@@ -200,12 +200,7 @@ class RocketBat:
         """ export in batch file format """
         
         print("TITLE               ", self.title)
-        if self.mode == 0:
-            print("SUMMARY             ")
-        elif self.mode == 1:
-            print("VERBOSE             ")
-        elif self.mode == 2:
-            print("DEBUG               ")
+        print("%-20s" % ["SUMMARY", "VERBOSE", "DEBUG"][self.mode])
         print("UNITS               ", self.units)
         print("OUTFILE             ", self.outfile)
         print()
@@ -234,6 +229,8 @@ class RocketBat:
             print("  MOTORNAME         ", stage.motorname)
             print("  STAGEDELAY        ", stage.stagedelay)
 
+        print("LAUNCH")
+        
     def as_flight(self):
         """ convert RocketBat to Flight """
 
@@ -291,6 +288,8 @@ def to_da_moon_alice(rkt):
         else:
             fname = SCREEN
 
+    if not fname.endswith('.txt'):
+        fname += '.txt'
     with open(fname, "w") as fp:
         flight.dump_header(fp)
         results = rasp.calc(flight)
@@ -449,6 +448,7 @@ def main():
 
     print()
     if len(sys.argv) > 1:
+        os.chdir('test')
         batch_flite(sys.argv[1])
 
 
