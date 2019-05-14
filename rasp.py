@@ -227,46 +227,34 @@ class Flight:
     def dump_header(self, fp):
         print(CH1, file=fp)
 
-        print("%c Rocket Name: %s" % (CH1, self.rname), file=fp)
-        print("%c Motor File:  %s" % (CH1, self.ename), file=fp)
+        print("%cRocket Name:  %s" % (CH1, self.rname), file=fp)
+        print("%cMotor File:   %s" % (CH1, self.ename), file=fp)
 
         wt = self.rocket_wt()
         for i, stage in enumerate(self.rocket.stages):
             print(CH1, file=fp)
             print("%c%5s  %-16s  %8s  %8s  %8s  %9s" % (
-              CH1, "Stage", "Engine", "Bare", "Launch", "AirFrame", "Effective"), file=fp)
+                  CH1, "Stage", "Engine", "Bare", "Launch", "AirFrame", "Effective"), file=fp)
 
             print("%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
-              CH1, "Num", "(Qt) Type", "Weight", "Weight", "Diameter",
-              "Diameter", "Cd"), file=fp)
+                  CH1, "Num", "(Qt) Type", "Weight", "Weight", "Diameter",
+                  "Diameter", "Cd"), file=fp)
 
             print("%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
-              CH1, "=====", "================", "========", "========",
-              "========", "=========", "====="), file=fp)
+                  CH1, "=====", "================", "========", "========",
+                  "========", "=========", "====="), file=fp)
 
             # todo: e_info is a named tuple so [] should not be needed
             print("%c%5d  (%1d) %-12s  %8.2f  %8.2f  %8.3f  %9.3f  %5.3f" % (
-              CH1, stage.number, stage.engnum, self.e_info[i]['code'],
-              stage.weight / OZ2KG, self.rocket_wt() / OZ2KG, stage.maxd,
-              stage.maxd + math.sqrt(stage.fins.area() / (IN2M * IN2M * math.pi)) / 2,
-              stage.cd), file=fp)
+                  CH1, stage.number, stage.engnum, self.e_info[i]['code'],
+                  stage.weight / OZ2KG, self.rocket_wt() / OZ2KG, stage.maxd,
+                  stage.maxd + math.sqrt(stage.fins.area() / (IN2M * IN2M * math.pi)) / 2,
+                  stage.cd), file=fp)
 
             wt -= self.stage_wt(i)
 
             raspinfo.print_engine_header(fp)
             raspinfo.print_engine_info(self.e_info[i], fp)
-
-        if self.verbose:
-            print(CH1, file=fp)
-            print("%c%4s %10s %10s %10s %11s %10s %10s" % (
-                CH1, "Time", "Altitude", "Velocity", "Accel",
-                "Weight", "Thrust", "Drag"), file=fp)
-            print("%c%4s %10s %10s %10s %11s %10s %10s" % (
-                CH1, "(Sec)", "(Feet)", "(Feet/Sec)", "(Ft/Sec^2)",
-                "(Grams)", "(Newtons)", "(Newtons)"), file=fp)
-            print("%c%4s %10s %10s %10s %11s %10s %10s" % (
-                CH1, "-----", "---------", "---------", "---------",
-                "-----------", "---------", "---------"), file=fp)
 
 
 class Results:
@@ -301,23 +289,42 @@ class Results:
 
         self.tee = []
         self.acc = []
+        self.vel = []
+        self.alt = []
         self.mass = []
+        self.drag = []
+        self.thrust = []
 
     def add_event(self, time, desc):
         self.events.append((time, desc))
 
     def display(self, fp, verbose=False):
-        for i, tee in enumerate(self.tee):
-            if i % 10 == 0:
-                print_alt = self.alt[i] * M2FT
-                print_vel = self.vel[i] * M2FT
-                print_accel = self.acc[i] * M2FT
-                print_mass = self.mass[i] * 1000  # I want my Mass in Grams
+        skip_count = 1
 
-                if verbose:
-                    print(" %4.1lf %10.1lf %10.1lf %10.1lf %11.2lf %10.3lf %10.3lf" % (
-                          tee, print_alt, print_vel, print_accel,
-                          print_mass, self.thrust[i], self.drag[i]), file=fp)
+        if verbose:
+            print(CH1, file=fp)
+            print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+                CH1, "Time", "Altitude", "Velocity", "Accel",
+                "Weight", "Thrust", "Drag"), file=fp)
+            print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+                CH1, "(Sec)", "(Feet)", "(Feet/Sec)", "(Ft/Sec^2)",
+                "(Grams)", "(Newtons)", "(Newtons)"), file=fp)
+            print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+                CH1, "-----", "---------", "---------", "---------",
+                "-----------", "---------", "---------"), file=fp)
+
+            # todo: reset start to zero
+            for i, tee in enumerate(self.tee[1:], start=1):
+                if i % skip_count == 0:
+                    print_alt = self.alt[i] * M2FT
+                    print_vel = self.vel[i] * M2FT
+                    print_accel = self.acc[i] * M2FT
+                    print_mass = self.mass[i] * 1000  # I want my Mass in Grams
+
+                    if verbose:
+                        print("%5.2lf %10.1lf %10.1lf %10.1lf %11.2lf %10.3lf %10.3lf" % (
+                              tee, print_alt, print_vel, print_accel,
+                              print_mass, self.thrust[i], self.drag[i]), file=fp)
 
         # TODO: add this
         # fprintf(stream, "%cStage %d Ignition at %5.2f sec.\n", ch1, this_stage + 1, t)
@@ -469,9 +476,9 @@ def choices(defaults):
     destnum = get_int("Send Data to:\n\t(1) Screen\n\t(2) Printer\n\t(3) Disk file\nEnter #", 1)
 
     if destnum == 1:
-        flight.fname = raspinfo.SCREEN
+        flight.fname = nc.SCREEN
     elif destnum == 2:
-        flight.fname = raspinfo.PRINTER
+        flight.fname = nc.PRINTER
     else:
         bname = get_str("Enter File Base Name", None)
         fname = '.'.join([bname, flight.e_info[0].code])
@@ -500,6 +507,7 @@ def calc(flight):
     results.baro_press = flight.baro_press
     results.base_temp = flight.base_temp
     results.site_alt = flight.site_alt
+    results.rod = flight.rod
 
     # rho == Air Density for drag calc
     results.rho_0 = (flight.baro_press * IN2PASCAL) / (GAS_CONST_AIR * flight.base_temp)
@@ -526,6 +534,8 @@ def calc(flight):
     results.vel = [0.0]
     results.acc = [0.0]
     results.mass = [mass]
+    results.drag = [0.0]
+    results.thrust = [0.0]
     t, thrust = engine['thrust'][0]
     if t == 0.0 and thrust != 0.0:
         results.acc = [(thrust - drag) / mass - G]
@@ -606,7 +616,6 @@ def calc(flight):
 
             c = r * drag_constant
 
-            # TODO: move this to an event
             results.events.append((t, f"Stage {stage.number} ignition"))
 
         # Handle the powered phase of the boost
@@ -713,6 +722,8 @@ def calc(flight):
         results.vel.append(vel)
         results.alt.append(alt)
         results.mass.append(mass)
+        results.drag.append(drag)
+        results.thrust.append(thrust)
 
         # test for lift-off and apogee
         if vel > 0:
@@ -809,6 +820,7 @@ def main():
             with open(flight.fname) as fp:
                 flight.dump_header(fp)
                 results = calc(flight)
+                results.display(fp)
 
             ans = input("\nDo Another One? ")
             if ans == "y" or ans == "Y":

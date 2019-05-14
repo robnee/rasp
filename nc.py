@@ -11,9 +11,12 @@ VERSION = '4.2'
 if sys.platform == "Windows":
     PRINTER = "PRN"
     SCREEN = "CON"
-else:
+elif sys.platform == "Linux":
     PRINTER = "/dev/lp"
     SCREEN = "/dev/tty"
+elif sys.platform == 'VMS':
+    PRINTER = "LP:"
+    SCREEN = "TT:"
 
 # Todo: make this a named_tuple
 """
@@ -275,7 +278,7 @@ class RocketBat:
 def to_da_moon_alice(rkt):
     flight = rkt.as_flight()
 
-    print("Launching", flight.rname)
+    print("Launching (%s) ..." % flight.e_info[0]['code'])
 
     fname = None
     if rkt.destination == "printer":
@@ -291,7 +294,7 @@ def to_da_moon_alice(rkt):
     with open(fname, "w") as fp:
         flight.dump_header(fp)
         results = rasp.calc(flight)
-        results.display(fp)
+        results.display(fp, flight.verbose)
 
 
 def batch_flite(batch_file):
