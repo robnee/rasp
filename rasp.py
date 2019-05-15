@@ -283,9 +283,6 @@ class Results:
 
         # how to keep the per-stage stats?
         self.events = []
-        self.start_burn = 0  # Start of engine (includes previous stage)
-        self.end_burn = 0    # End of engine burn  (includes previous stage)
-        self.end_stage = 0   # End of stage (includes previous stage)
 
         self.tee = []
         self.acc = []
@@ -299,7 +296,7 @@ class Results:
         self.events.append((time, desc))
 
     def display(self, fp, verbose=False):
-        skip_count = 1
+        skip_count = 100
 
         if verbose:
             print(CH1, file=fp)
@@ -322,7 +319,7 @@ class Results:
                     print_mass = self.mass[i] * 1000  # I want my Mass in Grams
 
                     if verbose:
-                        print("%5.2lf %10.1lf %10.1lf %10.1lf %11.2lf %10.3lf %10.3lf" % (
+                        print("%5.1f %10.1f %10.1f %10.2f %11.2f %10.3f %10.3f" % (
                               tee, print_alt, print_vel, print_accel,
                               print_mass, self.thrust[i], self.drag[i]), file=fp)
 
@@ -330,22 +327,22 @@ class Results:
         # fprintf(stream, "%cStage %d Ignition at %5.2f sec.\n", ch1, this_stage + 1, t)
 
         print(CH1, file=fp)
-        print("%cMaximum altitude attained = %.1lf feet (%.1lf meters)" % (
+        print("%cMaximum altitude attained = %.1f feet (%.1f meters)" % (
               CH1, self.max_alt * M2FT, self.max_alt), file=fp)
-        print("%cTime to peak altitude =     %.2lf seconds" % (CH1, self.t_max_alt), file=fp)
-        print("%cMaximum velocity =          %.1lf feet/sec at %.2lf sec" % (
+        print("%cTime to peak altitude =     %.2f seconds" % (CH1, self.t_max_alt), file=fp)
+        print("%cMaximum velocity =          %.1f feet/sec at %.2f sec" % (
                 CH1, self.max_vel * M2FT, self.t_max_vel), file=fp)
-        print("%cCutoff velocity =           %.1lf feet/sec at %.1lf feet ( %.2lf sec )" % (
+        print("%cCutoff velocity =           %.1f feet/sec at %.1f feet ( %.2f sec )" % (
                CH1, self.vcoff * M2FT, self.acoff * M2FT, self.tcoff), file=fp)
-        print("%cMaximum acceleration =      %.1lf feet/sec^2 at %.2lf sec" % (
+        print("%cMaximum acceleration =      %.1f feet/sec^2 at %.2f sec" % (
                CH1, self.max_accel * M2FT, self.t_max_accel), file=fp)
-        print("%cMinimum acceleration =      %.1lf feet/sec^2 at %.2lf sec" % (
+        print("%cMinimum acceleration =      %.1f feet/sec^2 at %.2f sec" % (
                CH1, self.min_accel * M2FT, self.t_min_accel), file=fp)
-        print("%cLaunch rod time =  %.2lf,  rod len   = %.1lf,       velocity  = %.1lf" % (
+        print("%cLaunch rod time =  %.2f,  rod len   = %.1f,       velocity  = %.1f" % (
                CH1, self.t_rod, self.rod * M2FT, self.v_rod), file=fp)
-        print("%cSite Altitude =   %5.0lf,  site temp = %.1lf F" % (
+        print("%cSite Altitude =   %5.0f,  site temp = %.1f F" % (
                CH1, self.site_alt * M2FT, ((self.base_temp - 273.15) * 9 / 5) + 32), file=fp)
-        print("%cBarometer     =   %.2f,  air density = %.4lf,  Mach vel  = %.1lf" % (
+        print("%cBarometer     =   %.2f,  air density = %.4f,  Mach vel  = %.1f" % (
               CH1, self.baro_press, self.rho_0, self.mach1_0 * M2FT),
               file=fp)
 
@@ -512,7 +509,7 @@ def calc(flight):
     # rho == Air Density for drag calc
     results.rho_0 = (flight.baro_press * IN2PASCAL) / (GAS_CONST_AIR * flight.base_temp)
 
-    mass = flight.rocket_wt()
+    mass = rocket_wt = flight.rocket_wt()
 
     stage = flight.rocket.stages[0]
     engine = flight.e_info[0]
@@ -580,7 +577,7 @@ def calc(flight):
             engine = flight.e_info[stage.number]
             
             stage_wt = flight.stage_wt(stage.number - 1)
-            mass -= stage_wt
+            rocket_wt -= stage_wt
 
             stage_time = burn_time = 0
             start_burn = t
@@ -653,7 +650,7 @@ def calc(flight):
             #
             # fprintf ( stderr, "Sum ( %f ) = %10.2f  ;  Mass = %10.6f\n", burn_time, sum_o_thrust, m1 )
 
-            mass -= m1
+            mass = rocket_wt - m1
         else:
             thrust = 0.0
 
@@ -905,10 +902,12 @@ def main():
                 print()
             else:
                 break
-                
+
+
 if __name__ == '__main__':
-    # todo: this is to work around pythonista bugs
-    sys.argv = ['rasp/rasp.py', '-d', 'test.ovi']
-    os.chdir('test')
+    # todo: this is to work around pythonista bugs with the debugger
+    if sys.platform == 'ios':
+        sys.argv = ['rasp/rasp.py', '-d', 'test.ovi']
+        os.chdir('test')
+
     main()
-                

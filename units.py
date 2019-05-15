@@ -123,6 +123,7 @@ def get_unit(unit_type, unit):
 def conv_unit(unit_type, val, in_unit, out_unit=None):
     
     factor, unit = get_unit(unit_type, in_unit)
+    number = 0.0
     if unit_type == 'temp':
         if unit == "C":
             number = 273.15 + val

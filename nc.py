@@ -275,7 +275,7 @@ class RocketBat:
 def to_da_moon_alice(rkt):
     flight = rkt.as_flight()
 
-    print("Launching (%s) ..." % flight.e_info[0]['code'])
+    print("Launching ( %s ) ..." % flight.e_info[0]['code'])
 
     fname = None
     if rkt.destination == "printer":
@@ -444,11 +444,13 @@ def batch_flite(batch_file):
 
 
 def main():
+    if sys.platform == 'ios':
+        os.chdir('test')
+
     print("\nRASP - Rocket Altitude Simulation Program V%s\n" % VERSION)
 
     print()
     if len(sys.argv) > 1:
-        os.chdir('test')
         batch_flite(sys.argv[1])
 
 
