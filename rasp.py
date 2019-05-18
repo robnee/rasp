@@ -262,7 +262,7 @@ class Results:
         self.rod = 0.0
         self.drag_bias = 0
         self.t_rod = 0.0  # launch rod info
-        self.v_rod = 0.0
+        self.t_coff = 0.0  # kjh added for cutoff data
         self.max_accel = 0.0
         self.t_max_accel = 0.0
         self.min_accel = 0.0
@@ -277,9 +277,6 @@ class Results:
         self.baro_press = 0.0
         self.base_temp = 0.0
         self.site_alt = 0.0
-        self.vcoff = 0.00
-        self.acoff = 0.00
-        self.tcoff = 0.00        # kjh added for cutoff data
 
         # how to keep the per-stage stats?
         self.events = []
@@ -292,6 +289,18 @@ class Results:
         self.drag = []
         self.thrust = []
 
+    def tindex(self, t):
+        return round(t / DELTA_T)
+    
+    def vcoff(self):
+        return self.vel[self.tindex(self.t_coff)]
+    
+    def acoff(self):
+        return self.acc[self.tindex(self.t_coff)]
+
+    def vrod(self):
+        return self.vel[self.tindex(self.t_rod)]
+        
     def add_event(self, time, desc):
         self.events.append((time, desc))
 
@@ -333,19 +342,21 @@ class Results:
         print("%cMaximum velocity =          %.1f feet/sec at %.2f sec" % (
                 CH1, self.max_vel * M2FT, self.t_max_vel), file=fp)
         print("%cCutoff velocity =           %.1f feet/sec at %.1f feet ( %.2f sec )" % (
-               CH1, self.vcoff * M2FT, self.acoff * M2FT, self.tcoff), file=fp)
+               CH1, self.vcoff() * M2FT, self.acoff() * M2FT, self.t_coff), file=fp)
         print("%cMaximum acceleration =      %.1f feet/sec^2 at %.2f sec" % (
                CH1, self.max_accel * M2FT, self.t_max_accel), file=fp)
         print("%cMinimum acceleration =      %.1f feet/sec^2 at %.2f sec" % (
                CH1, self.min_accel * M2FT, self.t_min_accel), file=fp)
         print("%cLaunch rod time =  %.2f,  rod len   = %.1f,       velocity  = %.1f" % (
-               CH1, self.t_rod, self.rod * M2FT, self.v_rod), file=fp)
+               CH1, self.t_rod, self.rod * M2FT, self.vrod() * M2FT), file=fp)
         print("%cSite Altitude =   %5.0f,  site temp = %.1f F" % (
                CH1, self.site_alt * M2FT, ((self.base_temp - 273.15) * 9 / 5) + 32), file=fp)
         print("%cBarometer     =   %.2f,  air density = %.4f,  Mach vel  = %.1f" % (
               CH1, self.baro_press, self.rho_0, self.mach1_0 * M2FT),
               file=fp)
 
+        print('\n'.join('{:.3f} {}'.format(t, d) for t, d in self.events), file=fp)
+        
 
 def get_str(prompt, default):
     entry = input(f"{prompt} [{default}]  ")
@@ -584,7 +595,6 @@ def calc(flight):
             end_burn = start_burn + engine.t2
             end_stage = end_burn + stage.stage_delay
             results.add_event(t, 'start_burn stage {stage.number}')
-            results.add_event(t, 'end_burn stage {stage.number}')
 
             # What is the effective Diameter and drag coeff of remaining stages
             stage_diam = flight.rocket.maxd(stage.number - 1)
@@ -654,10 +664,10 @@ def calc(flight):
         else:
             thrust = 0.0
 
-            if results.tcoff == 0.0 and stage == flight.rocket.stages[-1]:
-                results.tcoff = t
-                results.vcoff = results.vel[-1]
-                results.acoff = results.alt[-1]
+            results.add_event(t, 'end_burn stage {stage.number}') 
+
+            if not results.t_coff and stage == flight.rocket.stages[-1]:
+                results.t_coff = t
 
         """
         Crude approximations for MACH 1 Transition.
@@ -705,15 +715,12 @@ def calc(flight):
         # drag = - ( cc * vel * vel ) ;
         drag = - (cc * results.avg_vel * results.avg_vel)  # kjh changed this 05-23-96
 
+        # todo: this logic does not match c code
         if launched and results.vel[-1] <= 0:
             drag = - drag
-            accel = (drag / mass) - G  # kjh added this */
+            accel = (drag / mass) - G  # kjh added this
         else:
             accel = ((thrust + drag) / mass) - G
-
-        # todo: remove this
-        if t < 0.01:
-            print(t, launched, drag, thrust, accel, vel)
 
         vel = vel + accel * DELTA_T
         alt = alt + vel * DELTA_T
@@ -726,7 +733,7 @@ def calc(flight):
         elif launched and vel < 0:
             coast_time += DELTA_T  # time past burnout
 
-            if (alt <= 0.0) or (coast_time > flight.coast_base):  # kjh to coast a while
+            if alt <= 0.0 or coast_time > flight.coast_base:  # kjh to coast a while
                 break  # apogee, all done
 
         results.tee.append(t)
@@ -739,7 +746,6 @@ def calc(flight):
 
         if alt <= flight.rod and vel > 0:
             results.t_rod = t
-            results.v_rod = vel * M2FT
 
         # do max evaluations
         if accel > results.max_accel:
