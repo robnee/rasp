@@ -222,31 +222,31 @@ class Flight:
     def stage_wt(self, num):
         # todo: num is zero-based
         stage = self.rocket.stages[num]
-        return stage.weight + self.e_info[num]['wt'] * stage.engnum
+        return stage.weight + self.e_info[num].wt * stage.engnum
 
     def dump_header(self, fp):
         print(CH1, file=fp)
 
-        print("%cRocket Name:  %s" % (CH1, self.rname), file=fp)
-        print("%cMotor File:   %s" % (CH1, self.ename), file=fp)
+        print("%c Rocket Name:  %s" % (CH1, self.rname), file=fp)
+        print("%c Motor File:   %s" % (CH1, self.ename), file=fp)
 
         wt = self.rocket_wt()
         for i, stage in enumerate(self.rocket.stages):
             print(CH1, file=fp)
-            print("%c%5s  %-16s  %8s  %8s  %8s  %9s" % (
+            print("%c %5s  %-16s  %8s  %8s  %8s  %9s" % (
                   CH1, "Stage", "Engine", "Bare", "Launch", "AirFrame", "Effective"), file=fp)
 
-            print("%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
+            print("%c %5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
                   CH1, "Num", "(Qt) Type", "Weight", "Weight", "Diameter",
                   "Diameter", "Cd"), file=fp)
 
-            print("%c%5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
+            print("%c %5s  %-16s  %8s  %8s  %8s  %9s  %5s" % (
                   CH1, "=====", "================", "========", "========",
                   "========", "=========", "====="), file=fp)
 
             # todo: e_info is a named tuple so [] should not be needed
-            print("%c%5d  (%1d) %-12s  %8.2f  %8.2f  %8.3f  %9.3f  %5.3f" % (
-                  CH1, stage.number, stage.engnum, self.e_info[i]['code'],
+            print("%c %5d  (%1d) %-12s  %8.2f  %8.2f  %8.3f  %9.3f  %5.3f" % (
+                  CH1, stage.number, stage.engnum, self.e_info[i].code,
                   stage.weight / OZ2KG, self.rocket_wt() / OZ2KG, stage.maxd,
                   stage.maxd + math.sqrt(stage.fins.area() / (IN2M * IN2M * math.pi)) / 2,
                   stage.cd), file=fp)
@@ -267,7 +267,6 @@ class Results:
         self.t_max_accel = 0.0
         self.min_accel = 0.0
         self.t_min_accel = 0.0
-        self.avg_vel = 0.0
         self.max_vel = 0.0
         self.t_max_vel = 0.0
         self.max_alt = 0.0  # kjh added to save max alt
@@ -309,13 +308,13 @@ class Results:
 
         if verbose:
             print(CH1, file=fp)
-            print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+            print("%c %4s %10s %10s %10s %11s %10s %10s" % (
                 CH1, "Time", "Altitude", "Velocity", "Accel",
                 "Weight", "Thrust", "Drag"), file=fp)
-            print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+            print("%c %4s %10s %10s %10s %11s %10s %10s" % (
                 CH1, "(Sec)", "(Feet)", "(Feet/Sec)", "(Ft/Sec^2)",
                 "(Grams)", "(Newtons)", "(Newtons)"), file=fp)
-            print("%c%4s %10s %10s %10s %11s %10s %10s" % (
+            print("%c %4s %10s %10s %10s %11s %10s %10s" % (
                 CH1, "-----", "---------", "---------", "---------",
                 "-----------", "---------", "---------"), file=fp)
 
@@ -328,30 +327,30 @@ class Results:
                     print_mass = self.mass[i] * 1000  # I want my Mass in Grams
 
                     if verbose:
-                        print("%5.1f %10.1f %10.1f %10.2f %11.2f %10.3f %10.3f" % (
+                        print("%6.1f %10.1f %10.1f %10.2f %11.2f %10.3f %10.3f" % (
                               tee, print_alt, print_vel, print_accel,
                               print_mass, self.thrust[i], self.drag[i]), file=fp)
 
         # TODO: add this
-        # fprintf(stream, "%cStage %d Ignition at %5.2f sec.\n", ch1, this_stage + 1, t)
+        # fprintf(stream, "%c Stage %d Ignition at %5.2f sec.\n", ch1, this_stage + 1, t)
 
         print(CH1, file=fp)
-        print("%cMaximum altitude attained = %.1f feet (%.1f meters)" % (
+        print("%c Maximum altitude attained = %.1f feet (%.1f meters)" % (
               CH1, self.max_alt * M2FT, self.max_alt), file=fp)
-        print("%cTime to peak altitude =     %.2f seconds" % (CH1, self.t_max_alt), file=fp)
-        print("%cMaximum velocity =          %.1f feet/sec at %.2f sec" % (
+        print("%c Time to peak altitude =     %.2f seconds" % (CH1, self.t_max_alt), file=fp)
+        print("%c Maximum velocity =          %.1f feet/sec at %.2f sec" % (
                 CH1, self.max_vel * M2FT, self.t_max_vel), file=fp)
-        print("%cCutoff velocity =           %.1f feet/sec at %.1f feet ( %.2f sec )" % (
+        print("%c Cutoff velocity =           %.1f feet/sec at %.1f feet ( %.2f sec )" % (
                CH1, self.vcoff() * M2FT, self.acoff() * M2FT, self.t_coff), file=fp)
-        print("%cMaximum acceleration =      %.1f feet/sec^2 at %.2f sec" % (
+        print("%c Maximum acceleration =      %.1f feet/sec^2 at %.2f sec" % (
                CH1, self.max_accel * M2FT, self.t_max_accel), file=fp)
-        print("%cMinimum acceleration =      %.1f feet/sec^2 at %.2f sec" % (
+        print("%c Minimum acceleration =      %.1f feet/sec^2 at %.2f sec" % (
                CH1, self.min_accel * M2FT, self.t_min_accel), file=fp)
-        print("%cLaunch rod time =  %.2f,  rod len   = %.1f,       velocity  = %.1f" % (
+        print("%c Launch rod time =  %.2f,  rod len   = %.1f,       velocity  = %.1f" % (
                CH1, self.t_rod, self.rod * M2FT, self.vrod() * M2FT), file=fp)
-        print("%cSite Altitude =   %5.0f,  site temp = %.1f F" % (
+        print("%c Site Altitude =   %5.0f,  site temp = %.1f F" % (
                CH1, self.site_alt * M2FT, ((self.base_temp - 273.15) * 9 / 5) + 32), file=fp)
-        print("%cBarometer     =   %.2f,  air density = %.4f,  Mach vel  = %.1f" % (
+        print("%c Barometer     =   %.2f,  air density = %.4f,  Mach vel  = %.1f" % (
               CH1, self.baro_press, self.rho_0, self.mach1_0 * M2FT),
               file=fp)
 
@@ -497,7 +496,6 @@ def choices(defaults):
 
 def calc(flight):
     stage_time = 0.0                  # elapsed time for current stage
-    burn_time = 0.0                   # Elapsed time for motor burn
     thrust_index = 0                  # index into engine table
     start_burn = 0
     coast_time = 0.00                 # kjh to coast after burnout
@@ -526,7 +524,7 @@ def calc(flight):
     engine = flight.e_info[0]
      
     # figure start and stop times for motor burn and stage
-    end_burn = engine['t2']
+    end_burn = engine.t2()
     end_stage = end_burn + stage.stage_delay
 
     # What is the effective Diameter and drag coeff
@@ -539,14 +537,16 @@ def calc(flight):
     # kjh wants to see thrust at t=0 if there is any ...
     results.tee = [0.0]
     results.alt = [LAUNCHALT]
-    results.vel = [0.0]
-    results.acc = [0.0]
+    results.vel = [0.0]  
     results.mass = [mass]
     results.drag = [0.0]
-    results.thrust = [0.0]
-    t, thrust = engine['thrust'][0]
+    t, thrust = engine.thrust[0]
     if t == 0.0 and thrust != 0.0:
+        results.thrust = [thrust]
         results.acc = [(thrust - drag) / mass - G]
+    else:
+        results.thrust = [0.0]
+        results.acc = [0.0]
   
     # Launch Loop
     t = 0.000000
@@ -590,11 +590,11 @@ def calc(flight):
             stage_wt = flight.stage_wt(stage.number - 1)
             rocket_wt -= stage_wt
 
-            stage_time = burn_time = 0
+            stage_time = 0
             start_burn = t
             end_burn = start_burn + engine.t2
             end_stage = end_burn + stage.stage_delay
-            results.add_event(t, 'start_burn stage {stage.number}')
+            results.add_event(t, f'start_burn stage {stage.number}')
 
             # What is the effective Diameter and drag coeff of remaining stages
             stage_diam = flight.rocket.maxd(stage.number - 1)
@@ -627,30 +627,28 @@ def calc(flight):
 
         # Handle the powered phase of the boost
         if start_burn <= t <= end_burn:
-            burn_time += DELTA_T  # add to burn time
-
-            time_val, thrust_val = engine['thrust'][thrust_index]
+            time_val, thrust_val = engine.thrust[thrust_index]
 
             # see if we need to use the next thrust point
             # All times are relative to burn time for these calculations
-            if burn_time > time_val:
+            if t - start_burn > time_val:
                 old_time = time_val
                 old_thrust = thrust_val
 
                 thrust_index += 1
-                time_val, thrust_val = engine['thrust'][thrust_index]
+                time_val, thrust_val = engine.thrust[thrust_index]
 
             # Logic to smooth transition between thrust points.
             # Transitions are linear rather than discontinuous
             thrust = thrust_val - old_thrust
-            thrust *= (burn_time - old_time) / (time_val - old_time)
+            thrust *= (t - start_burn - old_time) / (time_val - old_time)
             thrust += old_thrust
             thrust *= stage.engnum
 
             # kjh changed this to consume propellant at thrust rate
             sum_o_thrust += (thrust * DELTA_T)
-            m1 = sum_o_thrust / (engine['ntot'] * stage.engnum)
-            m1 *= engine['m2'] * stage.engnum
+            m1 = sum_o_thrust / (engine.ntot() * stage.engnum)
+            m1 *= engine.m2 * stage.engnum
 
             # This is the Original Method
             #
@@ -661,10 +659,9 @@ def calc(flight):
             # fprintf ( stderr, "Sum ( %f ) = %10.2f  ;  Mass = %10.6f\n", burn_time, sum_o_thrust, m1 )
 
             mass = rocket_wt - m1
-        else:
+        elif thrust > 0.0:
             thrust = 0.0
-
-            results.add_event(t, 'end_burn stage {stage.number}') 
+            results.add_event(t, f'end_burn stage {stage.number}') 
 
             if not results.t_coff and stage == flight.rocket.stages[-1]:
                 results.t_coff = t
@@ -680,7 +677,7 @@ def calc(flight):
         """
 
         # average last two vel values
-        results.avg_vel = sum(results.vel[-2:]) / 2
+        avg_vel = sum(results.vel[-2:]) / 2
 
         # kjh Added M,C&B Model for TransSonic Region
         results.drag_bias = drag_diverge(flight.rocket.nose, results.mach1_0, vel)
@@ -713,7 +710,7 @@ def calc(flight):
 
         # kjh added to compute drag and report it in N
         # drag = - ( cc * vel * vel ) ;
-        drag = - (cc * results.avg_vel * results.avg_vel)  # kjh changed this 05-23-96
+        drag = - (cc * avg_vel * avg_vel)  # kjh changed this 05-23-96
 
         # todo: this logic does not match c code
         if launched and results.vel[-1] <= 0:
@@ -769,7 +766,7 @@ def calc(flight):
 
 def display_flight(flight, fp):
     for stage in range(len(flight.rocket.stages)):
-        print("%cStage Weight [%d]:  %9.4f" % (CH1, stage + 1, flight.totalwt(stage)), file=fp)
+        print("%c Stage Weight [%d]:  %9.4f" % (CH1, stage + 1, flight.totalwt(stage)), file=fp)
 
 
 def find_nose(nose):

@@ -275,7 +275,7 @@ class RocketBat:
 def to_da_moon_alice(rkt):
     flight = rkt.as_flight()
 
-    print("Launching ( %s ) ..." % flight.e_info[0]['code'])
+    print("Launching ( %s ) ..." % flight.e_info[0].code)
 
     fname = None
     if rkt.destination == "printer":
