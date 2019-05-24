@@ -110,7 +110,7 @@ import nc
 import argparse
 import raspinfo
 import pathproc
-from collections import defaultdict
+from collections import defaultdict, UserList
 
 VERSION = "4.1b"
 
@@ -257,6 +257,23 @@ class Flight:
             raspinfo.print_engine_info(self.e_info[i], fp)
 
 
+class Vector(UserList):
+    """ data vector that permits standard indexing as well as time-based indexing """
+
+    def __init__(self, init_val=None):
+        if init_val:
+            self.data = list(init_val)
+        else:
+            self.data = []
+        
+    def __getitem__(self, idx):
+        if type(idx) in (int, slice):
+            return self.data[idx]
+        elif type(idx) is float:
+            idx = round(idx / DELTA_T)
+            return self.data[idx]
+
+
 class Results:
     def __init__(self):
         self.rod = 0.0
@@ -281,9 +298,9 @@ class Results:
         self.events = []
 
         self.tee = []
-        self.acc = []
-        self.vel = []
-        self.alt = []
+        self.acc = Vector()
+        self.vel = Vector()
+        self.alt = Vector()
         self.mass = []
         self.drag = []
         self.thrust = []
@@ -295,7 +312,7 @@ class Results:
         return self.vel[self.tindex(self.t_coff)]
     
     def acoff(self):
-        return self.acc[self.tindex(self.t_coff)]
+        return self.alt[self.tindex(self.t_coff)]
 
     def vrod(self):
         return self.vel[self.tindex(self.t_rod)]
@@ -318,18 +335,16 @@ class Results:
                 CH1, "-----", "---------", "---------", "---------",
                 "-----------", "---------", "---------"), file=fp)
 
-            # todo: reset start to zero
-            for i, tee in enumerate(self.tee[1:], start=1):
+            for i, tee in enumerate(self.tee[1:]):
                 if i % skip_count == 0:
                     print_alt = self.alt[i] * M2FT
                     print_vel = self.vel[i] * M2FT
                     print_accel = self.acc[i] * M2FT
                     print_mass = self.mass[i] * 1000  # I want my Mass in Grams
 
-                    if verbose:
-                        print("%6.1f %10.1f %10.1f %10.2f %11.2f %10.3f %10.3f" % (
-                              tee, print_alt, print_vel, print_accel,
-                              print_mass, self.thrust[i], self.drag[i]), file=fp)
+                    print("%6.1f %10.1f %10.1f %10.2f %11.2f %10.3f %10.3f" % (
+                          tee, print_alt, print_vel, print_accel,
+                          print_mass, self.thrust[i], self.drag[i]), file=fp)
 
         # TODO: add this
         # fprintf(stream, "%c Stage %d Ignition at %5.2f sec.\n", ch1, this_stage + 1, t)
@@ -338,23 +353,23 @@ class Results:
         print("%c Maximum altitude attained = %.1f feet (%.1f meters)" % (
               CH1, self.max_alt * M2FT, self.max_alt), file=fp)
         print("%c Time to peak altitude =     %.2f seconds" % (CH1, self.t_max_alt), file=fp)
-        print("%c Maximum velocity =          %.1f feet/sec at %.2f sec" % (
-                CH1, self.max_vel * M2FT, self.t_max_vel), file=fp)
+        print("%c Launch rod velocity  =      %.1f feet/sec at %.1f feet ( %.2f sec )" % (
+               CH1, self.vrod() * M2FT, self.rod * M2FT, self.t_rod), file=fp)
+        print("%c Maximum velocity =          %.1f feet/sec at %.1f feet ( %.2f sec )" % (
+                CH1, self.max_vel * M2FT, self.alt[self.t_max_vel] * M2FT, self.t_max_vel), file=fp)
         print("%c Cutoff velocity =           %.1f feet/sec at %.1f feet ( %.2f sec )" % (
                CH1, self.vcoff() * M2FT, self.acoff() * M2FT, self.t_coff), file=fp)
         print("%c Maximum acceleration =      %.1f feet/sec^2 at %.2f sec" % (
                CH1, self.max_accel * M2FT, self.t_max_accel), file=fp)
         print("%c Minimum acceleration =      %.1f feet/sec^2 at %.2f sec" % (
                CH1, self.min_accel * M2FT, self.t_min_accel), file=fp)
-        print("%c Launch rod time =  %.2f,  rod len   = %.1f,       velocity  = %.1f" % (
-               CH1, self.t_rod, self.rod * M2FT, self.vrod() * M2FT), file=fp)
         print("%c Site Altitude =   %5.0f,  site temp = %.1f F" % (
                CH1, self.site_alt * M2FT, ((self.base_temp - 273.15) * 9 / 5) + 32), file=fp)
         print("%c Barometer     =   %.2f,  air density = %.4f,  Mach vel  = %.1f" % (
               CH1, self.baro_press, self.rho_0, self.mach1_0 * M2FT),
               file=fp)
 
-        print('\n'.join('{:.3f} {}'.format(t, d) for t, d in self.events), file=fp)
+        print("#\n# " + '\n# '.join('{:.3f} {}'.format(t, d) for t, d in self.events), file=fp)
         
 
 def get_str(prompt, default):
@@ -535,18 +550,18 @@ def calc(flight):
     # c = r * drag_constant
 
     # kjh wants to see thrust at t=0 if there is any ...
-    results.tee = [0.0]
-    results.alt = [LAUNCHALT]
-    results.vel = [0.0]  
-    results.mass = [mass]
-    results.drag = [0.0]
+    results.tee.append(0.0)
+    results.alt.append(LAUNCHALT)
+    results.vel.append(0.0)
+    results.mass.append(mass)
+    results.drag.append(0.0)
     t, thrust = engine.thrust[0]
     if t == 0.0 and thrust != 0.0:
-        results.thrust = [thrust]
-        results.acc = [(thrust - drag) / mass - G]
+        results.thrust.append(thrust)
+        results.acc.append((thrust - drag) / mass - G)
     else:
-        results.thrust = [0.0]
-        results.acc = [0.0]
+        results.thrust.append(0.0)
+        results.acc.append(0.0)
   
     # Launch Loop
     t = 0.000000
