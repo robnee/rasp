@@ -261,6 +261,7 @@ class Vector(UserList):
     """ data vector that permits standard indexing as well as time-based indexing """
 
     def __init__(self, init_val=None):
+        super().__init__(self)
         if init_val:
             self.data = list(init_val)
         else:
@@ -305,7 +306,8 @@ class Results:
         self.drag = []
         self.thrust = []
 
-    def tindex(self, t):
+    @staticmethod
+    def tindex(t):
         return round(t / DELTA_T)
     
     def vcoff(self):
@@ -511,15 +513,12 @@ def choices(defaults):
 
 def calc(flight):
     stage_time = 0.0                  # elapsed time for current stage
-    thrust_index = 0                  # index into engine table
     start_burn = 0
     coast_time = 0.00                 # kjh to coast after burnout
     drag = 0.0                        # kjh added to print Drag in Nt
     alt = LAUNCHALT
     vel = 0.0
     sum_o_thrust = 0.0                # kjh added to reduce pro mass ~ thrust
-    old_thrust = 0.0                  # last engine thrust from table
-    old_time = 0.0                    # last engine thrust time from table
     launched = False                  # indicates rocket has lifted off
     
     results = Results()
@@ -537,7 +536,7 @@ def calc(flight):
 
     stage = flight.rocket.stages[0]
     engine = flight.e_info[0]
-     
+
     # figure start and stop times for motor burn and stage
     end_burn = engine.t2()
     end_stage = end_burn + stage.stage_delay
@@ -593,10 +592,7 @@ def calc(flight):
 
         # handle staging, if needed
         if t > end_stage and stage.number < len(flight.rocket.stages):
-            thrust_index = 0
-            old_thrust = 0.0
             sum_o_thrust = 0.0
-            old_time = 0.0
 
             # this gets the next stage due to offset between number and index
             stage = flight.rocket.stages[stage.number]
@@ -642,23 +638,7 @@ def calc(flight):
 
         # Handle the powered phase of the boost
         if start_burn <= t <= end_burn:
-            time_val, thrust_val = engine.thrust[thrust_index]
-
-            # see if we need to use the next thrust point
-            # All times are relative to burn time for these calculations
-            if t - start_burn > time_val:
-                old_time = time_val
-                old_thrust = thrust_val
-
-                thrust_index += 1
-                time_val, thrust_val = engine.thrust[thrust_index]
-
-            # Logic to smooth transition between thrust points.
-            # Transitions are linear rather than discontinuous
-            thrust = thrust_val - old_thrust
-            thrust *= (t - start_burn - old_time) / (time_val - old_time)
-            thrust += old_thrust
-            thrust *= stage.engnum
+            thrust = engine.get_thrust(t) * stage.engnum
 
             # kjh changed this to consume propellant at thrust rate
             sum_o_thrust += (thrust * DELTA_T)

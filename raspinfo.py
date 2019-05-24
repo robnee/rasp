@@ -44,6 +44,18 @@ class Engine:
         self.thrust.append(Thrust(float(t), float(thrust)))
      
     def get_thrust(self, t):
+        """ get thrust with respect to t """
+
+        if t >= 0.0:
+            prev_t = 0.0
+            prev_thrust = 0.0
+            for node in self.thrust:
+                if round(t, 3) <= round(node.t, 3):
+                    factor = (t - prev_t) / (node.t - prev_t)
+                    return prev_thrust + factor * (node.thrust - prev_thrust)
+
+                prev_t, prev_thrust = node
+
         return 0.0
 
     def t2(self):
@@ -231,6 +243,11 @@ def main():
     print_engine_header(sys.stdout, fmt=args.fmt)
     for k in sorted(eng.keys()):
         print_engine_info(eng[k], sys.stdout, fmt=args.fmt)
+
+    e = eng['D12']
+    print(e.t2(), e.thrust)
+    for t in range(0, round(e.t2() * 10) + 1):
+        print(f"{t/10:3.1f} {e.get_thrust(t/10.0):.2f}")
 
 
 if __name__ == '__main__':
