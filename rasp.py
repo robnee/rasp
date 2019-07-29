@@ -244,7 +244,6 @@ class Flight:
                   CH1, "=====", "================", "========", "========",
                   "========", "=========", "====="), file=fp)
 
-            # todo: e_info is a named tuple so [] should not be needed
             print("%c %5d  (%1d) %-12s  %8.2f  %8.2f  %8.3f  %9.3f  %5.3f" % (
                   CH1, stage.number, stage.engnum, self.e_info[i].code,
                   stage.weight / OZ2KG, self.rocket_wt() / OZ2KG, stage.maxd,
@@ -707,7 +706,6 @@ def calc(flight):
         # drag = - ( cc * vel * vel ) ;
         drag = - (cc * avg_vel * avg_vel)  # kjh changed this 05-23-96
 
-        # todo: this logic does not match c code
         if launched and results.vel[-1] <= 0:
             drag = - drag
             accel = (drag / mass) - G  # kjh added this
